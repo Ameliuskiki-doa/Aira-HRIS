@@ -211,6 +211,7 @@ Employees request leave, approvers decide it, balances stay correct across the y
 ### Epic 5: Pay is configured
 A client picks an industry preset, sets salary components and a payroll calendar, and sees sample payslips from a dry-run before anything is committed. Statutory rates are seeded, dated, and beyond the tenant's reach.
 **CAPs covered:** CAP-3, CAP-8, CAP-17, CAP-28
+**Inherited obligation:** backfill `employee_assignments.payroll_calendar_id` and add its `not null` constraint, deferred from Epic 1.
 
 ### Epic 6: Payroll runs
 HR runs payroll for a period. Every figure traces to its inputs, the run locks immutably, corrections are a new run, and a mid-year joiner still reconciles correctly in December. Closes by adding the payroll run card to the dashboard built in Epic 3.
@@ -484,6 +485,11 @@ So that a transfer today never changes what a past payroll period looked like.
 **When** the codebase is inspected
 **Then** exactly one implementation exists, exported from `lib/domain`
 **And** `lib/db` fetches rows without re-deriving it.
+
+**Given** `payroll_calendars` does not exist until Epic 5
+**When** the `employee_assignments` migration runs
+**Then** `payroll_calendar_id` is nullable
+**And** a comment records that Epic 5 backfills it and adds the `not null` constraint.
 
 **Given** an employee assignment
 **When** it is created

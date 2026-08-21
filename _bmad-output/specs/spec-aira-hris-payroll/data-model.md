@@ -92,7 +92,9 @@ The role set is **fixed and not tenant-customisable** — see AD-33 for the tier
 
 **Many-to-many is required from day one.** One person can sit in several companies (group HR, directors, outsourcing vendors). Converting a unique `employees.user_id` to many-to-many after production data exists is painful.
 
-**Auth is phone + OTP (WhatsApp), or employee ID + PIN.** Not email/password. Warehouse staff, SPG and field workers do not have work email and will forget passwords. This is a leading cause of adoption failure in this segment.
+**Employees are never required to have a work email.** Warehouse staff, SPG and field workers do not have one and will forget passwords — historically a leading cause of adoption failure in this segment. That constraint stands, and it is about the **employee population**.
+
+Superseded in mechanism by AD-7 and AD-29: signup and administrator authentication is email; employees are provisioned by **token-based email invitation** against their personal address, and an account remains optional — `user_id` is nullable, so a person without email is still paid and still has attendance recorded by an authorised role. Phone+OTP and employee-ID+PIN are not implemented.
 
 ## Employees and dated assignments
 
@@ -129,7 +131,7 @@ create table employee_assignments (
   employment_type     text not null,         -- pkwtt|pkwt|harian_lepas|borongan|magang
   contract_start      date,
   contract_end        date,
-  payroll_calendar_id uuid not null,
+  payroll_calendar_id uuid,               -- nullable until Epic 5; see note below
   valid_from          date not null,
   valid_to            date
 );
@@ -188,6 +190,8 @@ create table payroll_periods (
   unique (tenant_id, calendar_id, code)
 );
 ```
+
+**`payroll_calendar_id` starts nullable and is tightened in Epic 5.** Assignments are created in Epic 1, but `payroll_calendars` does not exist until Epic 5 — so a `not null` column here would make employee import impossible. Epic 5's migration backfills the column and adds the `not null` constraint once calendars exist. Forward-only, which is what the migration rule is for.
 
 `payroll_calendar_id` attaches to **`employee_assignments`, not to the company** — one PT routinely has office staff on calendar month and daily workers on cut-off.
 
