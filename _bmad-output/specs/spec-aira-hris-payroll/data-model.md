@@ -81,8 +81,9 @@ create table memberships (
   company_id   uuid not null,
   employee_id  uuid,                   -- null for external accountants etc.
   role         text not null,          -- admin|hr_manager|hr_staff|supervisor|staff|accountant
-  is_active    boolean not null default true,
-  created_at   timestamptz not null default now(),
+  is_active      boolean not null default true,
+  last_active_at timestamptz,          -- the active company; see AD-37
+  created_at     timestamptz not null default now(),
   unique (user_id, company_id)
 );
 ```
@@ -406,6 +407,24 @@ create table audit_logs (
 ```
 
 Payroll-affecting mutations must be logged. This is both a compliance need and a sales credibility signal.
+
+`audit_logs` is **mutation-shaped**. Reads are logged separately, below.
+
+## PII access log
+
+```sql
+create table pii_access_logs (
+  id           uuid primary key,
+  tenant_id    uuid not null,
+  actor_id     uuid,
+  field_class  text not null,      -- nik|salary
+  scope        text not null,      -- what was queried
+  record_count integer not null,   -- how many records were exposed
+  created_at   timestamptz not null default now()
+) partition by range (created_at);
+```
+
+**One row per request, not per record.** A 200-employee list view writes one row naming the field class and a count of 200. Logging per record would put 200 writes on a read path and swamp the table mutations depend on. See AD-38.
 
 ## Global reference tables
 

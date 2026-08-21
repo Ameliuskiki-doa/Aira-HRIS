@@ -4,6 +4,8 @@ Companion to `SPEC.md`. The specification for the HR manager's landing screen, t
 
 **Status: documented, not implemented.** Non-happy states live in `screen-dashboard-states.md`; responsive, switcher, notification and accessibility behaviour in `screen-dashboard-interaction.md`. No code exists for this screen. Supabase `public` holds zero tables, so every figure below is fixture data.
 
+> **Component layer superseded by AD-36.** Class references below (`.card`, `.btn-primary`, `.tag-accent`, `.table`, `.seg`) describe the intended component shape. Implementation uses shadcn components styled with Nocturne tokens — see the mapping table in `design-system.md`. Sizes, spacing, colours and behaviour in this document are unchanged and remain binding.
+
 ## Purpose and audience
 
 The signed-in HR manager of one company (one PT = one `tenant_id`), landing after login. The screen answers three questions in one view:

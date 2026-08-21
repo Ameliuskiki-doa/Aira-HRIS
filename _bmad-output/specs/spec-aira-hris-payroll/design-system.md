@@ -82,9 +82,27 @@ The dashboard overrides these downward throughout (see `screen-dashboard.md`) �
 --shadow-lg  0 0 0 1px #9397ab, 0 16px 40px rgba(0,0,0,0.65)
 ```
 
-## Component classes
+## Component classes — superseded
 
-Build with these rather than inventing parallel ones.
+> **Superseded by AD-36.** Nocturne is vendored as the **token** source only. Components come from shadcn on Radix, copied into the repo and styled with Nocturne tokens through Tailwind v4's non-inline `@theme`. The nine classes below are documented because the screen specs were written against them and because they define the intended *shape* of each component — but application code does not use them.
+
+**Class → component mapping**
+
+| Nocturne class | Becomes |
+|---|---|
+| `.btn` + variants | `Button` with `variant` / `size` |
+| `.tag` + variants | `Badge` |
+| `.card` + `.elev-*` | `Card` |
+| `.table` | `Table` |
+| `.input`, `.field` | `Input`, `Label`, `Form` |
+| `.radio`, `.seg` | `RadioGroup`, `ToggleGroup` |
+| `.nav` | composed layout, not a shadcn primitive |
+| `.dialog*` | `Dialog` |
+| `.hr`, `.lighten` | plain CSS, kept as utilities |
+
+The fading-rule signature, the outlined-not-filled primary, and the accent-as-line-not-flood rules all carry over and must survive the port.
+
+The original class contract follows.
 
 | Class | What it is |
 |---|---|

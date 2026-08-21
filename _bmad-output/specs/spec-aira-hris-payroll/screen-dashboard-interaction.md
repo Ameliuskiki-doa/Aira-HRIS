@@ -4,6 +4,8 @@ Companion to `SPEC.md`. Third and last of the dashboard set: `screen-dashboard.m
 
 **Status: documented, not implemented.** Tokens and classes from `design-system.md`.
 
+> **Component layer superseded by AD-36.** Class references below (`.card`, `.btn-primary`, `.tag-accent`, `.table`, `.seg`) describe the intended component shape. Implementation uses shadcn components styled with Nocturne tokens — see the mapping table in `design-system.md`. Sizes, spacing, colours and behaviour in this document are unchanged and remain binding.
+
 ---
 
 ## Responsive

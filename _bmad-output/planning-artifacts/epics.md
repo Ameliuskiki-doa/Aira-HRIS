@@ -105,7 +105,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 
 ### Additional Requirements
 
-**🚨 STARTER TEMPLATE — affects Epic 1 Story 1.** The architecture binds `create-next-app` with `--typescript --app --eslint --no-tailwind --no-src-dir --import-alias "@/*"` (AD-28). `--no-src-dir` is required so `lib/` sits at root per AD-1. **The repo is not empty** (`docs/`, `_bmad/`, `_bmad-output/`, `.claude/`, `CLAUDE.md`, `.mcp.json`), and `create-next-app` refuses to write into a directory with conflicting files — so the scaffold is created in a temporary directory and merged in. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block. **No Tailwind:** it would put a second styling vocabulary beside Nocturne.
+**🚨 STARTER TEMPLATE — affects Epic 1 Story 1.** The architecture binds `create-next-app` with `--typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"` (AD-28). `--no-src-dir` is required so `lib/` sits at root per AD-1. **The repo is not empty** (`docs/`, `_bmad/`, `_bmad-output/`, `.claude/`, `CLAUDE.md`, `.mcp.json`), and `create-next-app` refuses to write into a directory with conflicting files — so the scaffold is created in a temporary directory and merged in. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block. **Tailwind is taken:** components come from shadcn on Radix (AD-36), styled by utilities that resolve to Nocturne tokens. Nocturne supplies tokens only; its component classes go unused.
 
 - Single repo, two runtimes: `lib/domain` imported by both Next.js (dry-run) and `worker/index.ts` (batch). *(AD-1)*
 - ESLint import-boundary rule enforcing core purity. *(AD-2)*
@@ -128,8 +128,8 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 ### UX Design Requirements
 
 - **UX-DR1** — Declare the eleven `--ui-*` semantic tokens (`body`, `muted`, `faint`, `nav`, `hover`, `track`, `tint`, `active-bg`, `active-fg`, `accent-text`, `link-hover`) per theme in application CSS. They are **not** part of Nocturne; without them the dashboard renders unstyled. *(AD-22)*
-- **UX-DR2** — Vendor Nocturne `styles.css` unmodified as the design system's source of truth; do not fork or edit it. *(AD-22)*
-- **UX-DR3** — Theme system defined in CSS (`:root` dark, `[data-theme="light"]`), with `color-scheme` set and a blocking inline script resolving the stored preference before first paint. Storage key `aira-theme`. Do not port the artboard's JS variable injection — it flashes on every load.
+- **UX-DR2** — Vendor Nocturne `styles.css` unmodified as the **token** source of truth and feed it to Tailwind v4 via a non-inline `@theme`. Its nine component classes go unused. Components come from shadcn on Radix, copied into the repo and styled with those tokens. Arbitrary Tailwind values (`p-[13px]`) are lint-forbidden. *(AD-22, AD-36)*
+- **UX-DR3** — Theme system defined in CSS (`:root` dark, `[data-theme="light"]`), with `color-scheme` set and a blocking inline script resolving the stored preference before first paint. Storage key `aira-theme`. Do not port the artboard's JS variable injection — it flashes on every load. `@theme inline` breaks runtime switching; use the two-stage pattern (raw values on `:root` and the dark selector, mapped by a non-inline `@theme`).
 - **UX-DR4** — Build five shared components: `Skeleton`, `EmptyBlock`, `ErrorBlock`, `FreshnessStamp`, `OnboardingChecklist`. Every region then needs only a state discriminator.
 - **UX-DR5** — Skeleton timing: nothing before 200ms, 400ms minimum once shown, "taking longer" line past 10s, region error past 30s. Fill `--ui-track`, opacity pulse only, never the accent, disabled under `prefers-reduced-motion`.
 - **UX-DR6** — Day-0 onboarding checklist replacing the stat row and two-column grid: six steps (import, branches, config preset, payroll calendar, YTD, dry-run), with the YTD step rendered only when onboarding after January. Never render zeroed stat cards.
@@ -158,32 +158,32 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 |---|---|---|
 | CAP-1 | Epic 1 | Tenant + in-tenant isolation, proven by a blocking CI gate |
 | CAP-2 | Epic 1 (admin auth, hook, roles) · Epic 2 (employee invitation) | One active company per token; role and employee_id in claims |
-| CAP-3 | Epic 4 | Dated statutory rate registry, seeded |
+| CAP-3 | Epic 5 | Dated statutory rate registry, seeded |
 | CAP-4 | Epic 2 | Job runtime — first consumer is photo thumbnails |
 | CAP-5 | Epic 2 | Client-compressed upload direct to R2 |
 | CAP-6 | Epic 1 | Employee records with dated assignments |
 | CAP-7 | Epic 1 | Excel import with validation preview |
-| CAP-8 | Epic 4 | Salary components and treatment flags |
+| CAP-8 | Epic 5 | Salary components and treatment flags |
 | CAP-9 | Epic 1 | Role-restricted NIK and salary, audit log, UU PDP |
 | CAP-10 | Epic 2 | Geofenced clock-in with photo and the anti-spoof bundle |
 | CAP-11 | Epic 2 | Offline queue, idempotent sync |
 | CAP-12 | Epic 2 | Night-shift attribution to the start date |
 | CAP-13 | Epic 2 | Attendance locking and audited corrections |
-| CAP-14 | Epic 2 (data) · Epic 7 (surface) | Materialized views, then the dashboard that reads them |
-| CAP-15 | Epic 3 | Leave requests, balances, carry-over |
+| CAP-14 | Epic 2 (views) · Epic 3 (attendance surface) · Epic 6 (payroll card) | The dashboard ships attendance-first; its own state spec covers the no-payroll case |
+| CAP-15 | Epic 4 | Leave requests, balances, carry-over |
 | CAP-16 | Epic 2 | Shift templates and bulk assignment |
-| CAP-17 | Epic 4 | Payroll calendars and periods, both pay models |
-| CAP-18 | Epic 5 | Gross-to-net pipeline, every figure traceable |
-| CAP-19 | Epic 5 | Overtime from a dated rate table |
-| CAP-20 | Epic 5 | PPh21 TER and December reconciliation |
-| CAP-21 | Epic 5 | BPJS, five programs |
-| CAP-22 | Epic 6 | THR as its own run |
-| CAP-23 | Epic 5 | Run immutability, database-enforced |
-| CAP-24 | Epic 5 | YTD maintained and importable |
-| CAP-25 | Epic 6 | Payslip snapshot and PDF |
-| CAP-26 | Epic 6 | Bank file, 1721-A1, BPJS, journal CSV |
-| CAP-27 | Epic 3 | Approval engine routing to positions |
-| CAP-28 | Epic 4 | Dated config, presets, dry-run |
+| CAP-17 | Epic 5 | Payroll calendars and periods, both pay models |
+| CAP-18 | Epic 6 | Gross-to-net pipeline, every figure traceable |
+| CAP-19 | Epic 6 | Overtime from a dated rate table |
+| CAP-20 | Epic 6 | PPh21 TER and December reconciliation |
+| CAP-21 | Epic 6 | BPJS, five programs |
+| CAP-22 | Epic 7 | THR as its own run |
+| CAP-23 | Epic 6 | Run immutability, database-enforced |
+| CAP-24 | Epic 6 | YTD maintained and importable |
+| CAP-25 | Epic 7 | Payslip snapshot and PDF |
+| CAP-26 | Epic 7 | Bank file, 1721-A1, BPJS, journal CSV |
+| CAP-27 | Epic 4 | Approval engine routing to positions |
+| CAP-28 | Epic 5 | Dated config, presets, dry-run |
 | CAP-29 | Epic 8 | Billing, dunning, read-only degrade |
 | CAP-30 | Epic 1 (signup + import) · Epic 8 (rest) | Self-serve onboarding end to end |
 | CAP-31 | Epic 8 | Support deflection |
@@ -193,32 +193,32 @@ All 31 capabilities are covered. No epic depends on a later epic.
 ## Epic List
 
 ### Epic 1: A company and its people exist in Aira
-An HR manager signs up by email, their company exists, and 200 employees are imported from a spreadsheet with a validation preview — with tenant **and in-tenant** isolation proven by a blocking CI gate from the very first table. Carries the non-retrofittable foundation: the organisation hierarchy, many-to-many memberships, dated assignments, integer rupiah, and role-aware RLS.
-**CAPs covered:** CAP-1, CAP-6, CAP-7, CAP-9, CAP-30 (signup and import)
+An HR manager signs up by email, their company exists inside the product's own frame, and 200 employees are imported from a spreadsheet with a validation preview — with tenant **and in-tenant** isolation proven by a blocking CI gate from the very first table.
+**CAPs covered:** CAP-1, CAP-2 (admin auth), CAP-6, CAP-7, CAP-9, CAP-30 (signup and import)
 
 ### Epic 2: Attendance is recorded from the floor
-Employees are invited by email, install nothing beyond the PWA, and clock in and out from their own phone against a server-side geofence with a photo — offline-safe, un-duplicatable, and hard to spoof. HR locks the period when it is done.
-**CAPs covered:** CAP-2, CAP-4, CAP-5, CAP-10, CAP-11, CAP-12, CAP-13, CAP-14 (materialized views), CAP-16
+Employees are invited by email and clock in and out from their own phone against a server-side geofence with a photo — offline-safe, un-duplicatable, and hard to spoof. HR locks the period when it is done.
+**CAPs covered:** CAP-2 (employee invitation), CAP-4, CAP-5, CAP-10, CAP-11, CAP-12, CAP-13, CAP-14 (materialized views), CAP-16
 
-### Epic 3: Leave and approvals
+### Epic 3: The day is visible
+The dashboard, in its attendance form: is today's attendance normal across every outlet, what is expiring or missing, and what needs a decision. It renders correctly with no payroll run because its own state specification already covers that case — the payroll card joins it in Epic 6.
+**CAPs covered:** CAP-14 (surface), UX-DR1–UX-DR24 except the payroll-run regions
+
+### Epic 4: Leave and approvals
 Employees request leave, approvers decide it, balances stay correct across the year boundary — on an approval engine that routes to positions, survives an approver resigning, and is reused later by overtime and correction requests.
 **CAPs covered:** CAP-15, CAP-27
 
-### Epic 4: Pay is configured
+### Epic 5: Pay is configured
 A client picks an industry preset, sets salary components and a payroll calendar, and sees sample payslips from a dry-run before anything is committed. Statutory rates are seeded, dated, and beyond the tenant's reach.
 **CAPs covered:** CAP-3, CAP-8, CAP-17, CAP-28
 
-### Epic 5: Payroll runs
-HR runs payroll for a period. Every figure traces to its inputs, the run locks immutably, corrections are a new run, and a mid-year joiner still reconciles correctly in December.
+### Epic 6: Payroll runs
+HR runs payroll for a period. Every figure traces to its inputs, the run locks immutably, corrections are a new run, and a mid-year joiner still reconciles correctly in December. Closes by adding the payroll run card to the dashboard built in Epic 3.
 **CAPs covered:** CAP-18, CAP-19, CAP-20, CAP-21, CAP-23, CAP-24
 
-### Epic 6: People are paid and the filings exist
+### Epic 7: People are paid and the filings exist
 Employees receive a payslip that is complete and permanent; HR gets a bank transfer file that validates, plus the statutory and accounting exports. THR runs on its own base.
 **CAPs covered:** CAP-22, CAP-25, CAP-26
-
-### Epic 7: One screen answers the day
-The dashboard: is today's attendance normal, what is blocking the payroll run and does it add up, and what needs a decision right now — with every empty, loading, error, calculating, stale and read-only state specified.
-**CAPs covered:** CAP-14 (surface), plus all 24 UX-DRs
 
 ### Epic 8: It sells without being touched
 Signup to a finished payroll with zero human contact: onboarding, billing at organisation level, dunning, read-only degrade that never blocks payslip access, and support deflected rather than staffed.
@@ -232,9 +232,9 @@ An HR manager signs up by email, their company exists, and 200 employees are imp
 
 **CAPs:** CAP-1, CAP-2 (admin auth), CAP-6, CAP-7, CAP-9, CAP-30 (signup and import)
 **Key ADs:** AD-1, AD-2, AD-7, AD-8, AD-9, AD-10, AD-14, AD-15, AD-16, AD-18, AD-21, AD-22, AD-23, AD-25, AD-27, AD-28, AD-31, AD-33
-**UX-DRs:** UX-DR1, UX-DR2, UX-DR3
+**UX-DRs:** UX-DR1, UX-DR2, UX-DR3, UX-DR15, UX-DR16, UX-DR18, UX-DR19 (single-company case), UX-DR21 (partial)
 
-### Story 1.1: Scaffold the application shell
+### Story 1.1: Scaffold the repository
 
 As a developer,
 I want the repository scaffolded with the bound structure and its boundaries enforced,
@@ -243,10 +243,10 @@ So that every later story lands in the right place and cannot quietly violate co
 **Acceptance Criteria:**
 
 **Given** a repository containing `docs/`, `_bmad/`, `.claude/` and `CLAUDE.md`
-**When** the scaffold is created with `create-next-app --typescript --app --eslint --no-tailwind --no-src-dir --import-alias "@/*"` in a temporary directory and merged in
+**When** the scaffold is created with `create-next-app --typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"` in a temporary directory and merged in
 **Then** no pre-existing file is overwritten
 **And** `lib/` sits at the repository root, not under `src/`
-**And** no Tailwind dependency or config is present.
+**And** Tailwind v4 is present and configured (its tokens are wired in Story 1.2).
 
 **Given** the scaffold is merged
 **When** the tree is inspected
@@ -265,15 +265,16 @@ So that every later story lands in the right place and cannot quietly violate co
 ### Story 1.2: Design system foundation
 
 As a developer,
-I want Nocturne and the app's semantic token layer in place with working themes,
-So that every screen built afterwards renders correctly in both themes without a flash.
+I want Nocturne's tokens driving Tailwind and shadcn installed on top,
+So that every screen afterwards is accessible by default, themed correctly, and unmistakably this product rather than a generic starter.
 
 **Acceptance Criteria:**
 
-**Given** the Nocturne design system
-**When** it is vendored into `styles/`
-**Then** `styles.css` is byte-identical to the source and is never edited
-**And** it is linked from the root layout.
+**Given** the Nocturne design system, which lives in the Claude Design project `dcaaa7ad-e795-4fad-8b3e-223f30a4ad1d` at `_ds/nocturne-ee56407c-8063-417c-bf1f-fe655f93985a/styles.css`
+**When** it is fetched and vendored to `styles/nocturne.css`
+**Then** the file is byte-identical to the source and is never edited
+**And** its colour ramps, type, spacing, radius and elevation tokens are exposed to Tailwind through a **non-inline** `@theme`
+**And** none of its nine component classes are used by application code.
 
 **Given** the eleven `--ui-*` semantic variables the screens depend on
 **When** application CSS is loaded
@@ -284,13 +285,61 @@ So that every screen built afterwards renders correctly in both themes without a
 **When** they load any page
 **Then** the page paints in light on first paint with no flash of dark
 **And** the preference is read from `localStorage` key `aira-theme` by a blocking inline script
-**And** `color-scheme` is set to match.
+**And** `color-scheme` is set to match
+**And** runtime switching works, proving the two-stage theme pattern rather than `@theme inline`.
+
+**Given** shadcn is initialised
+**When** a component is added
+**Then** its files are copied into the repository rather than added as a runtime dependency
+**And** it renders using Nocturne tokens, not shadcn's default palette.
+
+**Given** a component or page written with an arbitrary Tailwind value such as `p-[13px]` or `bg-[#9184d9]`
+**When** lint runs
+**Then** it fails, naming the token that should have been used instead.
 
 **Given** no stored preference
 **When** the page loads
 **Then** the dark theme applies, matching the Nocturne `:root` defaults.
 
-### Story 1.3: Tenant isolation harness
+### Story 1.3: The application shell
+
+As an HR manager,
+I want the product to have its frame — navigation, header, and theme — from the first screen,
+So that every page I use afterwards sits in one consistent, recognisable product rather than a series of bare forms.
+
+**Acceptance Criteria:**
+
+**Given** the shell
+**When** it renders at 1440px
+**Then** the layout is a 236px sidebar beside a fluid main column at a 13px base size
+**And** the sidebar carries the brand mark, four labelled navigation groups, and an active item marked with `--ui-active-bg` and its inset accent ring
+**And** the active item carries `aria-current="page"`.
+
+**Given** the header
+**When** it renders
+**Then** it shows the company name with branch count, the date and timezone resolved from `companies.timezone`, the theme toggle, and the user block with initials, name and role
+**And** every icon-only button has an accessible name.
+
+**Given** a viewport below 1024px
+**When** the shell renders
+**Then** the sidebar collapses to a 64px icon rail with tooltips on hover and on focus
+**And** navigation items are at least 44px tall.
+
+**Given** a viewport below 768px
+**When** the shell renders
+**Then** the sidebar becomes an off-canvas drawer opened from a header control
+**And** it closes on backdrop click, on `Esc`, and on navigation
+**And** focus is trapped while open and returns to the trigger on close.
+
+**Given** the content area
+**When** no page has been built into it yet
+**Then** the shell renders an empty content region without layout errors in either theme.
+
+**Given** a user holding exactly one membership
+**When** the header renders
+**Then** the company name is a plain label with no caret and no menu.
+
+### Story 1.4: Tenant isolation harness
 
 As a developer,
 I want tenant isolation enforced by the database and proven by a blocking test before any real data exists,
@@ -321,7 +370,7 @@ So that a cross-tenant leak is caught by CI rather than by a client.
 **When** CI runs
 **Then** the build fails and the merge is blocked.
 
-### Story 1.4: Sign up by email and create a company
+### Story 1.5: Sign up by email and create a company
 
 As an HR manager,
 I want to sign up with my email and register my company,
@@ -349,7 +398,7 @@ So that I have a tenant of my own without anyone from Aira touching the account.
 **When** the user lands in the application
 **Then** all user-facing copy is Indonesian.
 
-### Story 1.5: Membership, roles, and tenant context in the token
+### Story 1.6: Membership, roles, and tenant context in the token
 
 As an HR manager,
 I want my session to carry which company I am acting in and what I am allowed to see,
@@ -360,6 +409,7 @@ So that the database can enforce my access without the application asking it to.
 **Given** the `memberships` table
 **When** it is created
 **Then** it enforces `unique (user_id, company_id)`
+**And** it carries `last_active_at`, which is where the active company lives
 **And** `role` accepts only `admin`, `hr_manager`, `hr_staff`, `supervisor`, `staff` or `accountant` via a check constraint, not a Postgres enum
 **And** `employee_id` is nullable.
 
@@ -378,10 +428,11 @@ So that the database can enforce my access without the application asking it to.
 
 **Given** a user holding memberships in two companies
 **When** they switch company
-**Then** the active company is updated and a new token is issued carrying the new `tenant_id`
+**Then** `last_active_at` is updated on the chosen membership and a new token is issued carrying the new `tenant_id`
+**And** the hook resolves the active membership by greatest `last_active_at`, tie-broken by `created_at`
 **And** no query returns rows from both companies.
 
-### Story 1.6: Company structure — branches, departments, positions
+### Story 1.7: Company structure — branches, departments, positions
 
 As an HR manager,
 I want to set up my outlets, departments and positions,
@@ -406,7 +457,7 @@ So that employees can be assigned somewhere and approvals have something to rout
 **When** its migration is inspected
 **Then** it carries `tenant_id`, RLS enabled and forced, a tenant policy, and a `tenant_id`-leading index in the same file.
 
-### Story 1.7: Employee records with dated assignments
+### Story 1.8: Employee records with dated assignments
 
 As an HR manager,
 I want an employee's branch, department, position and manager to be recorded with effective dates,
@@ -439,7 +490,7 @@ So that a transfer today never changes what a past payroll period looked like.
 **Then** `manager_id` is stored independently of `department_id`
 **And** `employment_type` accepts only `pkwtt`, `pkwt`, `harian_lepas`, `borongan` or `magang`.
 
-### Story 1.8: Import employees from a spreadsheet
+### Story 1.9: Import employees from a spreadsheet
 
 As an HR manager,
 I want to upload my existing employee spreadsheet and see what will happen before it is saved,
@@ -470,7 +521,7 @@ So that I can onboard 200 people myself without calling anyone.
 **When** it is confirmed
 **Then** it completes without a request timeout.
 
-### Story 1.9: Personal data protection and the audit trail
+### Story 1.10: Personal data protection and the audit trail
 
 As an HR manager,
 I want salary and NIK visible only to the roles that need them and every change on the record,
@@ -481,7 +532,12 @@ So that the system is defensible under UU PDP and credible in a sales conversati
 **Given** a session whose claim role is `hr_staff`
 **When** employee records are read
 **Then** salary fields are not returned
-**And** the request is recorded in the access log.
+**And** one `pii_access_logs` row is written for the request, naming the field class, the scope and the count of records exposed.
+
+**Given** a list view exposing 200 employees' salary
+**When** it is read
+**Then** exactly **one** `pii_access_logs` row is written with `record_count` 200
+**And** `audit_logs` is not written to, because no mutation occurred.
 
 **Given** a session whose claim role is `staff`
 **When** employee records are read
@@ -505,3 +561,302 @@ So that the system is defensible under UU PDP and credible in a sales conversati
 **When** it runs
 **Then** it asserts in-tenant isolation for each role tier in addition to cross-tenant isolation
 **And** it is a blocking CI gate.
+
+---
+
+## Epic 2: Attendance is recorded from the floor
+
+Employees are invited by email, install nothing beyond the PWA, and clock in and out from their own phone against a server-side geofence with a photo — offline-safe, un-duplicatable, and hard to spoof. HR locks the period when it is done.
+
+**CAPs:** CAP-2 (employee invitation), CAP-4, CAP-5, CAP-10, CAP-11, CAP-12, CAP-13, CAP-14 (materialized views), CAP-16
+**Key ADs:** AD-3, AD-4, AD-5, AD-6, AD-15, AD-17, AD-20, AD-23, AD-27, AD-29, AD-30, AD-32
+**Prerequisites outside this epic:** a transactional email provider must be chosen before Story 2.1; the native mock-location decision must be settled before this epic reaches a paying client.
+
+### Story 2.1: Invite an employee to their own account
+
+As an HR manager,
+I want to invite an employee by email so they can sign in themselves,
+So that they can clock in from their own phone without me handing out credentials.
+
+**Acceptance Criteria:**
+
+**Given** an employee record with an email address
+**When** HR sends an invitation
+**Then** an `employee_invitations` row is created carrying a cryptographically random token and an expiry
+**And** an email is sent containing a link bearing that token
+**And** no admin invite API and no `service_role` client is used anywhere in the path.
+
+**Given** a valid, unexpired invitation token
+**When** the recipient completes signup
+**Then** the **token** links the new auth user to the pending `employees` row
+**And** a `memberships` row is created with role `staff`
+**And** the invitation is marked consumed and cannot be reused.
+
+**Given** an attacker who signs up with an employee's email address but without the token
+**When** they complete signup
+**Then** they are not linked to any employee record.
+
+**Given** an employee with no email address
+**When** HR views them
+**Then** the record remains valid and payable
+**And** `employees.user_id` stays null.
+
+**Given** an expired invitation
+**When** the link is opened
+**Then** it is refused and HR can reissue.
+
+### Story 2.2: A job runtime that cannot block a request
+
+As a developer,
+I want long-running work to run on a worker with retries, scheduling and tenant safety,
+So that photo processing, view refreshes and later payroll can never time out a request or leak across tenants.
+
+**Acceptance Criteria:**
+
+**Given** the worker entrypoint
+**When** it starts
+**Then** pg-boss runs against the existing Postgres in its own schema
+**And** the worker connects with a direct session connection, not through Supavisor transaction mode.
+
+**Given** the isolation catalog sweep
+**When** it runs
+**Then** the pg-boss schema is an explicitly named allowlisted exemption, not an accidental omission.
+
+**Given** any job handler
+**When** it begins work
+**Then** it sets tenant context for its transaction from the `tenant_id` in its payload before touching any tenant table.
+
+**Given** a job that fails
+**When** it is retried
+**Then** it backs off, and after exhausting retries lands in a dead-letter state that is visible rather than silent.
+
+**Given** a job submitted twice with the same idempotency key
+**When** both are processed
+**Then** the effect occurs once.
+
+**Given** a queue with a concurrency limit
+**When** more jobs are enqueued than the limit
+**Then** the excess waits rather than running.
+
+**Given** recurring work
+**When** it is scheduled
+**Then** it is registered with pg-boss cron
+**And** `pg_cron` is not used anywhere in the project.
+
+### Story 2.3: Shift templates and assignment
+
+As an HR manager,
+I want to define shifts and assign them across a team for a date range,
+So that attendance can be judged against an expected schedule rather than guessed.
+
+**Acceptance Criteria:**
+
+**Given** a shift template
+**When** it is created
+**Then** start time, end time, break minutes and late tolerance are set
+**And** `crosses_midnight` is explicit, never inferred from the times.
+
+**Given** 100 employees and a month of dates
+**When** shifts are assigned by department or branch over a date range
+**Then** the assignment completes as one operation
+**And** `shift_assignments` enforces `unique (tenant_id, employee_id, work_date)`.
+
+**Given** a selected week
+**When** the coverage view is opened
+**Then** days with no assigned shift are shown as unassigned.
+
+### Story 2.4: Clock in and out with geofence and photo
+
+As an employee,
+I want to clock in from my own phone with a photo when I am at my outlet,
+So that my attendance is recorded without paper or a queue at a shared machine.
+
+**Acceptance Criteria:**
+
+**Given** an employee inside their branch radius
+**When** they clock in
+**Then** a photo is captured, compressed client-side to 60–80 KB, and uploaded **directly to R2** via a short-TTL signed URL
+**And** the image bytes never pass through a Next.js route handler
+**And** the R2 credentials never reach the client.
+
+**Given** any clock-in
+**When** it is captured
+**Then** the photo and GPS fix are written to a local queue **first**, before any network call
+**And** capture succeeds even when the access token has expired.
+
+**Given** an employee outside the branch radius
+**When** they clock in
+**Then** a reason is required
+**And** the record is flagged for supervisor review.
+
+**Given** a clock-in
+**When** the server records it
+**Then** the geofence check is performed **server-side** against `branches.radius_m`, never trusted from the client.
+
+**Given** a shift template with a late tolerance
+**When** an employee clocks in after start time plus tolerance
+**Then** `late_minutes` is recorded and status is `late`.
+
+**Given** the clock in/out endpoint
+**When** measured under load
+**Then** p95 latency is under 500ms.
+
+### Story 2.5: Thumbnails and photo retention
+
+As an operator,
+I want thumbnails generated once and old photos purged on schedule,
+So that list views stay fast and photo egress never becomes the dominant cost.
+
+**Acceptance Criteria:**
+
+**Given** a photo uploaded to R2
+**When** the thumbnail job runs
+**Then** a 10–15 KB thumbnail is generated once and its key stored on the attendance row.
+
+**Given** any list view of attendance
+**When** it renders
+**Then** it requests thumbnails only, never full images.
+
+**Given** the object path for any photo
+**When** inspected
+**Then** it is prefixed `{tenant_id}/{employee_id}/`
+**And** the bucket is not public and is reachable only through short-TTL signed URLs.
+
+**Given** the retention schedule
+**When** it runs as a pg-boss cron job
+**Then** photos past the tenant's retention window are archived or deleted
+**And** the free tier's window is 30 days.
+
+### Story 2.6: Offline capture and idempotent sync
+
+As an employee at a site with no signal,
+I want my clock-in to be recorded and sent when I get back online,
+So that I am not marked absent for working somewhere with poor coverage.
+
+**Acceptance Criteria:**
+
+**Given** no network connection
+**When** an employee clocks in
+**Then** the punch is stored locally with a device-generated `client_uuid`
+**And** the interface confirms it is queued rather than reporting failure.
+
+**Given** queued punches and a restored connection
+**When** sync runs
+**Then** each punch is submitted to a route handler URL
+**And** authentication happens at sync time, using a freshly refreshed token.
+
+**Given** the same `client_uuid` submitted repeatedly
+**When** the server processes it
+**Then** exactly one attendance row exists.
+
+**Given** a sync that fails midway
+**When** it is retried
+**Then** already-synced punches are not resent as duplicates
+**And** unsynced punches remain queued.
+
+### Story 2.7: A shift that crosses midnight is one day's work
+
+As a payroll administrator,
+I want an overnight shift attributed to a single date,
+So that overtime and allowances are calculated against the shift that was actually worked.
+
+**Acceptance Criteria:**
+
+**Given** a shift template with `crosses_midnight` true, running 22:00 to 06:00
+**When** an employee clocks in at 22:00 on 5 July and out at 06:00 on 6 July
+**Then** exactly one `attendances` row exists
+**And** its `work_date` is 5 July, the date the shift **started**
+**And** it matches the `shift_assignments.work_date` that scheduled it.
+
+**Given** that same overnight attendance
+**When** work minutes are computed
+**Then** they span the date boundary correctly and exclude break minutes.
+
+**Given** timestamps stored for any attendance
+**When** inspected
+**Then** they are `timestamptz` in UTC
+**And** display and day-boundary logic use `companies.timezone`.
+
+### Story 2.8: Clock-in trust is more than GPS
+
+As an HR manager,
+I want spoofed attendance to be hard and visible,
+So that a faked punch cannot quietly become a wrong payslip through attendance-based allowances.
+
+**Acceptance Criteria:**
+
+**Given** an employee's first successful clock-in
+**When** it is recorded
+**Then** the device is bound to that employee.
+
+**Given** a clock-in from a device other than the bound one
+**When** it is submitted
+**Then** it is accepted but flagged for supervisor review
+**And** the flag is visible in the attendance record.
+
+**Given** two consecutive punches whose locations are physically impossible in the elapsed time
+**When** the second is processed
+**Then** it is flagged as implausible.
+
+**Given** an uploaded attendance photo
+**When** it is processed
+**Then** its capture timestamp is checked against the submitted punch time
+**And** a mismatch beyond tolerance is flagged.
+
+**Given** any flagged punch
+**When** payroll later reads attendance
+**Then** the flag is carried through and visible, not silently dropped.
+
+### Story 2.9: Lock the period, and record every correction
+
+As an HR manager,
+I want to lock attendance for a period and have any later change recorded,
+So that payroll calculates from a set that stopped moving and every edit is defensible.
+
+**Acceptance Criteria:**
+
+**Given** a period whose attendance is complete
+**When** HR locks it
+**Then** `attendance_locked_at` is set on the period
+**And** locking attendance is a separate action from locking a payroll run.
+
+**Given** a locked period
+**When** a user without an authorised role attempts a correction
+**Then** it is refused.
+
+**Given** a locked period
+**When** an authorised role makes a correction
+**Then** the change succeeds
+**And** an `audit_logs` row records actor, before and after.
+
+**Given** any attempt to modify locked attendance
+**When** it is made through the worker role rather than a request path
+**Then** it is subject to the same rule, enforced in the database.
+
+### Story 2.10: The monthly recap reads from a view, not the table
+
+As a supervisor,
+I want the monthly attendance recap to open immediately,
+So that reading a report never competes with people clocking in.
+
+**Acceptance Criteria:**
+
+**Given** 500 employees with a month of attendance
+**When** the monthly recap is opened
+**Then** it renders in under 2 seconds
+**And** the query reads a materialized view, not `attendances` directly.
+
+**Given** the materialized views
+**When** the nightly refresh runs
+**Then** it runs as a pg-boss cron job
+**And** the current day is updated incrementally rather than by full refresh.
+
+**Given** the `attendances` table
+**When** its definition is inspected
+**Then** it is partitioned by range on `work_date`
+**And** a pg-boss cron job provisions the next three months of partitions.
+
+**Given** aggregate reporting anywhere in the product
+**When** it is implemented
+**Then** it reads a materialized view
+**And** no live aggregate query runs against the primary attendance table.

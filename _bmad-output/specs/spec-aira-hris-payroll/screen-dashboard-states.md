@@ -4,6 +4,8 @@ Companion to `SPEC.md`, sibling to `screen-dashboard.md` (which specifies the lo
 
 The source artboard draws one state: everything present and correct. This document specifies the rest; `screen-dashboard-interaction.md` covers responsive, switcher, notification and accessibility behaviour. **Status: documented, not implemented.**
 
+> **Component layer superseded by AD-36.** Class references below (`.card`, `.btn-primary`, `.tag-accent`, `.table`, `.seg`) describe the intended component shape. Implementation uses shadcn components styled with Nocturne tokens — see the mapping table in `design-system.md`. Sizes, spacing, colours and behaviour in this document are unchanged and remain binding.
+
 ## Governing principle
 
 **Never render a number you cannot stand behind.**

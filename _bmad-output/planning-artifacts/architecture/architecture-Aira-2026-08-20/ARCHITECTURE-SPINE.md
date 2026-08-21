@@ -177,7 +177,7 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 ### AD-22 — The `--ui-*` layer has a home
 - **Binds:** every screen
 - **Prevents:** the dashboard rendering unstyled because eleven variables it depends on exist only inside the canvas artboard
-- **Rule:** Nocturne `styles.css` is vendored unmodified as the design system's source of truth. The app-level `--ui-*` semantic layer is declared in application CSS beside it, per theme.
+- **Rule:** Nocturne `styles.css` comes from the Claude Design project `dcaaa7ad-e795-4fad-8b3e-223f30a4ad1d` at `_ds/nocturne-ee56407c-8063-417c-bf1f-fe655f93985a/styles.css`, vendored to `styles/nocturne.css` byte-identical and re-fetched only deliberately. It is the **token** source of truth — colours, ramps, type, spacing, radius, elevation. Its nine component classes go unused; components come from AD-36. The app-level `--ui-*` semantic layer is declared in application CSS beside it, per theme.
 
 ### AD-23 — One implementation per derived concept
 - **Binds:** `lib/domain`, `lib/db`
@@ -206,8 +206,8 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 
 ### AD-28 — Scaffold from the starter, not by hand
 - **Binds:** the repo scaffold, Epic 1 Story 1
-- **Prevents:** hand-rolled config drifting from the framework's current defaults; and a second styling vocabulary beside Nocturne, whose readme directs building with its documented component classes rather than inventing parallel ones
-- **Rule:** `create-next-app` with `--typescript --app --eslint --no-tailwind --no-src-dir --import-alias "@/*"`. `--no-src-dir` is required so `lib/` sits at root per AD-1. The repo is not empty, so the scaffold is created in a temporary directory and merged in. Styling is vendored Nocturne `styles.css` plus CSS Modules; no utility-class framework. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block.
+- **Prevents:** hand-rolled config drifting from the framework's current defaults
+- **Rule:** `create-next-app` with `--typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"`. `--no-src-dir` is required so `lib/` sits at root per AD-1. The repo is not empty, so the scaffold is created in a temporary directory and merged in. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block.
 
 ### AD-29 — Employee identity is a token-based email invitation
 - **Binds:** CAP-2, CAP-6, CAP-10
@@ -254,6 +254,21 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 - **Prevents:** deadlocking a 30-employee client whose HR is one person — the sweet spot — while still leaving the control signal on the record
 - **Rule:** `payroll_runs.locked_by` and the audit log carry who edited and who locked. Enforcement is not applied. Revisit when a client asks for it.
 
+### AD-36 — One component vocabulary, no escape hatch
+- **Binds:** every screen, UX-DR1 through UX-DR24
+- **Prevents:** hand-rolling ~20 components Nocturne does not carry — combobox, date picker, sortable paginated table, multi-step wizard, shift calendar, toast, tabs, popover, tooltip, file upload, drawer — and hand-rolling their accessibility with it; four a11y defects were already found in a single hand-authored screen. Also prevents the two-vocabulary drift of running Nocturne's classes alongside utilities
+- **Rule:** Components come from shadcn on Radix, copied into the repo, styled by Tailwind utilities that resolve to Nocturne tokens through the v4 `@theme` directive. Nocturne's component classes are **not** used alongside. **Arbitrary values are forbidden and lint-enforced** — `p-[13px]` may not reintroduce a hard-coded value the tokens already carry. Runtime theme switching requires the two-stage pattern: raw values on `:root` and the dark selector, mapped by a **non-inline** `@theme`.
+
+### AD-37 — The active company lives on the membership
+- **Binds:** CAP-2, the AD-10 hook
+- **Prevents:** a developer inventing a store for something AD-10 assumed existed — and the obvious wrong answer of writing it to `app_metadata` directly, which needs the admin API and violates AD-16
+- **Rule:** `memberships.last_active_at`. The hook picks the caller's active membership by greatest `last_active_at`, tie-broken deterministically by `created_at`. Switching company updates that column. No separate table: `memberships` already ties user to company, and a standalone table would sit above the tenant boundary.
+
+### AD-38 — PII reads log separately from mutations
+- **Binds:** CAP-9
+- **Prevents:** read volume swamping the mutation audit trail — one 200-employee list view would write 200 rows into the table mutations depend on
+- **Rule:** `pii_access_logs`, partitioned by `created_at`, holding **one row per request**: actor, field class (`nik` or `salary`), the query scope, and the count of records exposed. Not one row per record. `audit_logs` stays mutation-shaped with `before`/`after`.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -287,6 +302,9 @@ Verified 2026-08-20.
 | @sentry/nextjs | 10.70.0 |
 | ltree | 1.3 — available, **not yet installed** |
 | Build tooling | Turbopack (starter default) |
+| Tailwind CSS | 4.3.3 |
+| shadcn | 4.18.0 |
+| class-variance-authority | 0.7.1 |
 
 ## Structural Seed
 
