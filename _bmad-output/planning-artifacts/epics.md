@@ -128,8 +128,8 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 ### UX Design Requirements
 
 - **UX-DR1** — Declare the eleven `--ui-*` semantic tokens (`body`, `muted`, `faint`, `nav`, `hover`, `track`, `tint`, `active-bg`, `active-fg`, `accent-text`, `link-hover`) per theme in application CSS. They are **not** part of Nocturne; without them the dashboard renders unstyled. *(AD-22)*
-- **UX-DR2** — Vendor Nocturne `styles.css` unmodified as the **token** source of truth and feed it to Tailwind v4 via a non-inline `@theme`. Its nine component classes go unused. Components come from shadcn on Radix, copied into the repo and styled with those tokens. Arbitrary Tailwind values (`p-[13px]`) are lint-forbidden. *(AD-22, AD-36)*
-- **UX-DR3** — Theme system defined in CSS (`:root` dark, `[data-theme="light"]`), with `color-scheme` set and a blocking inline script resolving the stored preference before first paint. Storage key `aira-theme`. Do not port the artboard's JS variable injection — it flashes on every load. `@theme inline` breaks runtime switching; use the two-stage pattern (raw values on `:root` and the dark selector, mapped by a non-inline `@theme`).
+- **UX-DR2** — Vendor Nocturne `styles.css` unmodified as the **token** source of truth and feed it to Tailwind v4 via `@theme inline` with `var()` indirection. Its nine component classes go unused. Components come from shadcn on Radix, copied into the repo and styled with those tokens. Arbitrary Tailwind values (`p-[13px]`) are lint-forbidden. *(AD-22, AD-36)*
+- **UX-DR3** — Theme system in CSS: raw values on `:root` and `.dark`, mapped through **`@theme inline` with `var()` indirection**. Never literals inside `@theme inline` — Tailwind folds them to constants and theming dies with a green build. Dark mode is the `.dark` class per shadcn's `@custom-variant`. `color-scheme` set to match. A blocking inline script resolves the stored preference from `localStorage` key `aira-theme` before first paint. Do not port the artboard's JS variable injection.
 - **UX-DR4** — Build five shared components: `Skeleton`, `EmptyBlock`, `ErrorBlock`, `FreshnessStamp`, `OnboardingChecklist`. Every region then needs only a state discriminator.
 - **UX-DR5** — Skeleton timing: nothing before 200ms, 400ms minimum once shown, "taking longer" line past 10s, region error past 30s. Fill `--ui-track`, opacity pulse only, never the accent, disabled under `prefers-reduced-motion`.
 - **UX-DR6** — Day-0 onboarding checklist replacing the stat row and two-column grid: six steps (import, branches, config preset, payroll calendar, YTD, dry-run), with the YTD step rendered only when onboarding after January. Never render zeroed stat cards.
@@ -274,7 +274,7 @@ So that every screen afterwards is accessible by default, themed correctly, and 
 **Given** the Nocturne design system, which lives in the Claude Design project `dcaaa7ad-e795-4fad-8b3e-223f30a4ad1d` at `_ds/nocturne-ee56407c-8063-417c-bf1f-fe655f93985a/styles.css`
 **When** it is fetched and vendored to `styles/nocturne.css`
 **Then** the file is byte-identical to the source and is never edited
-**And** its colour ramps, type, spacing, radius and elevation tokens are exposed to Tailwind through a **non-inline** `@theme`
+**And** its colour ramps, type, spacing, radius and elevation tokens reach Tailwind through `@theme inline` with `var()` indirection to raw values
 **And** none of its nine component classes are used by application code.
 
 **Given** the eleven `--ui-*` semantic variables the screens depend on
@@ -287,12 +287,13 @@ So that every screen afterwards is accessible by default, themed correctly, and 
 **Then** the page paints in light on first paint with no flash of dark
 **And** the preference is read from `localStorage` key `aira-theme` by a blocking inline script
 **And** `color-scheme` is set to match
-**And** runtime switching works, proving the two-stage theme pattern rather than `@theme inline`.
+**And** runtime switching works in a **nested** subtree, not only on the root element — proving `@theme inline` with `var()` indirection rather than literals or a non-inline `@theme`.
 
-**Given** shadcn is initialised
+**Given** shadcn is initialised on Base UI
 **When** a component is added
-**Then** its files are copied into the repository rather than added as a runtime dependency
-**And** it renders using Nocturne tokens, not shadcn's default palette.
+**Then** its component files are copied into the repository and are editable source
+**And** it renders using Nocturne tokens, not shadcn's default palette
+**And** dark mode fires through the `.dark` class.
 
 **Given** a component or page written with an arbitrary Tailwind value such as `p-[13px]` or `bg-[#9184d9]`
 **When** lint runs

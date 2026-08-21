@@ -170,7 +170,7 @@ Note `--ui-tint` keeps the **dark** accent hex in both themes — it is a wash, 
 
 The artboard applies the theme by writing every variable onto `document.documentElement.style` from JavaScript on mount, and persists the choice to `localStorage` under the key `aira-theme`. That is a canvas-runtime pattern and should **not** be carried into the app: it produces a flash of unstyled content on every load, because the first paint happens before the script runs.
 
-In the app, declare both themes in CSS (`:root` for dark, `[data-theme="light"]` for light), set `color-scheme` alongside, and resolve the stored preference in a blocking inline script before first paint. Keep the same variable names, the same values, and the same `aira-theme` storage key so the design and the app stay in step.
+In the app, declare raw values on `:root` (dark) and on `.dark`'s counterpart for light, then map them through **`@theme inline` with `var()` indirection** — that is what lets a utility resolve at the element and makes scoped theming work. **Never put literal values inside `@theme inline`**: Tailwind constant-folds them into the utility, no variable survives to override, and the build still succeeds. A non-inline `@theme` is strictly worse — it resolves the indirection once at `:root`, so a nested themed subtree never changes. Dark mode is the **`.dark` class**, matching shadcn's `@custom-variant dark (&:is(.dark *))`; because the class need only sit on an ancestor, scoped theming still works. Resolve the stored preference in a blocking inline script before first paint, keeping the `aira-theme` key.
 
 ## Compliance notes
 
