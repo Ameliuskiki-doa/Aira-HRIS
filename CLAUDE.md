@@ -78,3 +78,7 @@ Ask rather than guess, specifically about:
 
 Guessing wrong on statutory logic produces incorrect payslips, which is the one
 failure mode this product cannot survive.
+
+---
+
+@AGENTS.md

@@ -207,7 +207,7 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 ### AD-28 — Scaffold from the starter, not by hand
 - **Binds:** the repo scaffold, Epic 1 Story 1
 - **Prevents:** hand-rolled config drifting from the framework's current defaults
-- **Rule:** `create-next-app` with `--typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"`. `--no-src-dir` is required so `lib/` sits at root per AD-1. The repo is not empty, so the scaffold is created in a temporary directory and merged in. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block.
+- **Rule:** `create-next-app` with `--typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"`. `--no-src-dir` is required so `lib/` sits at root per AD-1. The repo is not empty, so the scaffold is created in a temporary directory and merged in. The starter also writes `AGENTS.md` and an 11-byte `CLAUDE.md` containing `@AGENTS.md`. **Keep the repo's `CLAUDE.md`** and append that import to it — replacing it destroys the project charter. `AGENTS.md` **coexists** with the `bmad-project-context` managed block: `next dev` rewrites its own block on every run, so deleting it only produces a recurring dirty diff. `.gitignore` is **unioned**, never replaced.
 
 ### AD-29 — Employee identity is a token-based email invitation
 - **Binds:** CAP-2, CAP-6, CAP-10
@@ -290,8 +290,8 @@ Verified 2026-08-20.
 
 | Name | Version |
 |---|---|
-| Next.js | 16.3.1 |
-| TypeScript | 7.0.2 |
+| Next.js | 16.3.2 |
+| TypeScript | 5.9.3 (starter-resolved) |
 | Node | ≥ 22.12 (pg-boss floor); local 25.9.0 |
 | PostgreSQL (Supabase) | 17.6 |
 | pg-boss | 12.27.0 |
