@@ -9,7 +9,7 @@ const ROOT = fileURLToPath(new URL(".", import.meta.url));
  * boundary suite would otherwise leave `npm test` green while nothing checks
  * that lib/domain is still pure.
  */
-const REQUIRED_SUITES = ["tests/boundary.test.ts"];
+const REQUIRED_SUITES = ["tests/boundary.test.ts", "tests/theme.test.ts"];
 
 for (const suite of REQUIRED_SUITES) {
   if (!existsSync(new URL(suite, import.meta.url))) {

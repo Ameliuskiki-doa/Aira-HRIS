@@ -2,8 +2,9 @@
 title: 'Story 1.2 — Design system foundation'
 type: 'feature'
 created: '2026-08-22'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: '77d0831bc5a62745b4e9e479e0f6faf9b3e00e2d'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
   - '{project-root}/_bmad-output/specs/spec-aira-hris-payroll/design-system.md'
@@ -63,16 +64,16 @@ Probed empirically on 2026-08-22; every claim below was run, not read.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `styles/nocturne.css` -- copy the pre-fetched file; verify the sha256 matches before proceeding
-- [ ] `shadcn init` -- run with Base UI and a preset, non-interactive; accept that it rewrites `globals.css` and edits `layout.tsx`
-- [ ] `app/globals.css` -- keep shadcn's semantic `@theme inline` block untouched; repoint only its raw `:root` and `.dark` values at the Nocturne scale, so every generated component follows without being edited. Import Nocturne's token block; do **not** link the vendored file itself
-- [ ] `--ui-*` layer -- declare all eleven per theme from the table in `design-system.md`; `--ui-tint` keeps the dark accent hex in both
-- [ ] `--color-accent` collision -- resolve it so the brand blurple is reachable and shadcn's surface meaning is not silently repurposed; record the choice in a comment
-- [ ] `app/layout.tsx` -- Inter via `next/font/google` mapped onto `--font-heading` and `--font-body`; remove Geist; remove the `font-family: Arial` override
-- [ ] theme script -- a blocking inline script resolving `localStorage.aira-theme` before first paint, setting the `.dark` class and `color-scheme`
-- [ ] `eslint.config.mjs` -- `no-arbitrary-value` on app code, off for `components/ui/**`
-- [ ] `components/ui/` -- add `button` and one overlay primitive as proof the pipeline works end to end
-- [ ] `tests/theme.test.ts` -- cover the I/O matrix, including the nested-theme case that is the only thing distinguishing a correct `@theme inline` from a literal-poisoned one
+- [x] `styles/nocturne.css` -- copy the pre-fetched file; verify the sha256 matches before proceeding
+- [x] `shadcn init` -- run with Base UI and a preset, non-interactive; accept that it rewrites `globals.css` and edits `layout.tsx`
+- [x] `app/globals.css` -- keep shadcn's semantic `@theme inline` block untouched; repoint only its raw `:root` and `.dark` values at the Nocturne scale, so every generated component follows without being edited. Import Nocturne's token block; do **not** link the vendored file itself
+- [x] `--ui-*` layer -- declare all eleven per theme from the table in `design-system.md`; `--ui-tint` keeps the dark accent hex in both
+- [x] `--color-accent` collision -- resolve it so the brand blurple is reachable and shadcn's surface meaning is not silently repurposed; record the choice in a comment
+- [x] `app/layout.tsx` -- Inter via `next/font/google` mapped onto `--font-heading` and `--font-body`; remove Geist; remove the `font-family: Arial` override
+- [x] theme script -- a blocking inline script resolving `localStorage.aira-theme` before first paint, setting the `.dark` class and `color-scheme`
+- [x] `eslint.config.mjs` -- `no-arbitrary-value` on app code, off for `components/ui/**`
+- [x] `components/ui/` -- add `button` and one overlay primitive as proof the pipeline works end to end
+- [x] `tests/theme.test.ts` -- the suite must **fail if any single token wiring is removed** — a `@theme inline` key, a raw declaration in either scope, the `variable:` name in `layout.tsx`, or the script's blocking-ness. That property, not a list of cases, is the requirement. Assert on the **compiled utility**, not the source declaration, and on the rendered `<script>` tag, not the script body. Register the suite in `REQUIRED_SUITES`.
 
 **Acceptance Criteria:**
 - Given `.dark` on a descendant element rather than `<html>`, when the page renders, then that subtree themes independently — this fails if any literal reaches `@theme inline`.
@@ -82,6 +83,14 @@ Probed empirically on 2026-08-22; every claim below was run, not read.
 - Given the vendored stylesheet, when hashed, then it matches the recorded sha256, and no `<link>` or CSS `@import` pulls the file into the document.
 - Given a rendered page, when fonts are inspected, then Inter is served by `next/font` and no request goes to fonts.googleapis.com.
 - Given all four gates, when run, then lint, typecheck, test and build exit zero.
+
+## Spec Change Log
+
+**2026-08-22 — patch round, no loopback.**
+*Trigger:* four mutations passed green — deleting the `--font-heading` theme key (utility silently not generated), renaming `variable: "--font-inter"` (whole app falls to the system font), adding `defer` to the theme `<script>` (the assertion regexes the script *body*, which cannot contain a tag attribute), and deleting the entire suite (`REQUIRED_SUITES` guards only Story 1.1's).
+*Root cause:* the test task read "cover the I/O matrix" — a list. Story 1.1 learned this lesson across two loopbacks and its change log records it; this spec reverted to the old shape.
+*Why no revert:* unlike Story 1.1, the production code is verified correct — theming resolves through `var()` in both scopes, the lint rule bites precisely, the checksum matches, no runtime font request. Only the suite and two wirings are wrong, and both fix additively.
+*Amended:* the test task now states the mutation property, requires assertions on the compiled utility and the rendered tag rather than source text, and requires `REQUIRED_SUITES` registration.
 
 ## Design Notes
 
@@ -98,3 +107,43 @@ The nested-theme test is the load-bearing one. Root-only theming passes under th
 - `npm test` -- expected: exits zero, theme suite runs
 - `npm run build` -- expected: exits zero
 - `grep -r "fonts.googleapis.com" app/ styles/*.css --include=*.tsx --include=*.css` -- expected: only the untouched vendored file
+
+## Suggested Review Order
+
+**The theming mechanism — read this first**
+
+- The `@theme inline` blocks. Every key here must be `var()` indirection; a literal would be constant-folded and theming would die with a green build.
+  [`globals.css:10`](../../app/globals.css#L10)
+
+- Dark mode is a class, not an attribute — shadcn's own variant, which also permits scoped theming.
+  [`globals.css:35`](../../app/globals.css#L35)
+
+- The raw layer, light scope. Contrast ratios are recorded per role.
+  [`globals.css:271`](../../app/globals.css#L271)
+
+- The raw layer, dark scope — the same roles, the same ordering.
+  [`globals.css:353`](../../app/globals.css#L353)
+
+- `--color-neutral-650`: the one value with no upstream origin, filling the gap where light has three AA steps and four roles need four.
+  [`globals.css:180`](../../app/globals.css#L180)
+
+**Proof it cannot silently regress**
+
+- The contrast suite computes ratios rather than pinning hexes, and asserts the arithmetic itself before trusting any threshold beneath it.
+  [`theme.test.ts:440`](../../tests/theme.test.ts#L440)
+
+- The design-system suite is registered, so deleting it fails at config load instead of reading as success.
+  [`vitest.config.mts:12`](../../vitest.config.mts#L12)
+
+**The escape hatch**
+
+- Arbitrary values forbidden in app code, off for vendored primitives which ship them by design.
+  [`eslint.config.mjs:73`](../../eslint.config.mjs#L73)
+
+**Typography and first paint**
+
+- Inter self-hosted; the `variable` name here is one half of a contract the suite now pins from both sides.
+  [`layout.tsx:11`](../../app/layout.tsx#L11)
+
+- The pre-paint resolver, kept in its own module so it is testable rather than a string in JSX.
+  [`theme-script.ts:44`](../../app/theme-script.ts#L44)

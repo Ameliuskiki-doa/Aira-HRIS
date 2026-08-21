@@ -41,3 +41,27 @@ Findings surfaced by review that are real but not caused by, or not in scope for
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-scaffold-the-repository.md`
   summary: Every CI build depends on network access to Google Fonts via `next/font/google` (Geist).
   evidence: A build-time external dependency that will fail closed on a network blip, never explicitly decided.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
+  summary: Vendored shadcn primitives need an app-level wrapper layer — they ship English copy and non-token colours, and hand-editing them is silently reverted by the next `shadcn add`.
+  evidence: `components/ui/dialog.tsx` carries `"Close"` twice as user-facing English against a definition of done requiring Indonesian, and `DialogOverlay` hardcodes `bg-black/10`, a near-invisible scrim over `--color-bg: #161826`. The frozen spec block forbids hand-editing `components/ui/`, and the engineering reason holds independently: a fix applied there disappears without warning on regeneration. The pattern applies to every primitive needing Indonesian copy, not only dialog, which makes it structural work for Story 1.3's shell rather than a patch here.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
+  summary: The light theme is unreachable — nothing in the repo writes the theme preference, and `prefers-color-scheme` is no longer consulted.
+  evidence: No `setItem` call exists anywhere under `app/`, `components/` or `lib/`; the resolver only reads `localStorage.aira-theme`. The starter honoured OS preference and that block was removed. Until Story 1.3 ships a toggle, every user is locked to dark regardless of system preference, and roughly forty lines of light-theme CSS plus half the theme suite guard a state no one can reach.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
+  summary: Nocturne's 0.70x density scale is declared but inert — `--space-*` has no consumer and `p-4` is still 16px.
+  evidence: Setting Tailwind's `--spacing` to the Nocturne scale would rescale every shadcn component and every `size-*` icon at once, so the reconciliation was deliberately deferred. Until it happens the product's spacing is Tailwind's, not Nocturne's, and the tokens are dead weight that reads as if it were wired.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
+  summary: Any future `no-restricted-syntax` block is a live hazard to the AD-2 purity boundary.
+  evidence: ESLint replaces rule options rather than merging them, so a new block whose `files` glob overlaps `lib/domain/**` silently deletes every purity denial while lint still exits zero. This happened during this story and only the boundary suite caught it, with 68 failures. Any new block must exclude the core directory, and that constraint is currently recorded only in a code comment.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
+  summary: No PWA chrome, no `prefers-reduced-motion` guard, and no `color-mix()` fallback.
+  evidence: CLAUDE.md calls the product PWA-first, yet there is no manifest, no `themeColor` viewport export and no `<meta name="theme-color">`, so browser chrome stays light while the app is dark. `tw-animate-css` was newly imported and dialog animations use it with no reduced-motion guard. Every `--ui-*` surface value and `--color-divider` — applied globally through `border-border` — is `color-mix()`, which is invalid at computed-value time on engines without support; the production minifier does emit solid fallbacks, but the resulting colours are flattened. Relevant for Indonesian field staff on older Android WebViews.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
+  summary: The design system is documented nowhere a contributor is pointed at.
+  evidence: CLAUDE.md's "Where things are" map lists only `docs/01`–`docs/07`, none of which were touched. The `@theme inline` trap, the `accent`→`brand` rename, the forbidden ramp steps and the arbitrary-value rule live only in CSS comments and in `_bmad-output/specs/.../design-system.md`, which CLAUDE.md never mentions. The same gap applies to the `AD-*` identifiers cited throughout the code.

@@ -152,10 +152,10 @@ The app semantic layer, per theme:
 
 | Variable | Dark | Light |
 |---|---|---|
-| `--ui-body` | text @ 58% | text @ 62% |
-| `--ui-muted` | text @ 46% | text @ 52% |
-| `--ui-faint` | text @ 38% | text @ 42% |
-| `--ui-nav` | text @ 72% | text @ 74% |
+| `--ui-body` | `--color-neutral-300` (10.20:1) | `--color-neutral-800` (8.13:1) |
+| `--ui-muted` | `--color-neutral-400` (7.55:1) | `--color-neutral-700` (5.32:1) |
+| `--ui-faint` | `--color-neutral-500` (5.25:1) | `#636778` (4.56:1) |
+| `--ui-nav` | `--color-neutral-100` (13.97:1) | `--color-neutral-900` (11.49:1) |
 | `--ui-hover` | text @ 6% | accent @ 8% |
 | `--ui-track` | text @ 12% | text @ 12% |
 | `--ui-tint` | `#9184d9` @ 9% | `#9184d9` @ 14% |
@@ -171,6 +171,14 @@ Note `--ui-tint` keeps the **dark** accent hex in both themes — it is a wash, 
 The artboard applies the theme by writing every variable onto `document.documentElement.style` from JavaScript on mount, and persists the choice to `localStorage` under the key `aira-theme`. That is a canvas-runtime pattern and should **not** be carried into the app: it produces a flash of unstyled content on every load, because the first paint happens before the script runs.
 
 In the app, declare raw values on `:root` (dark) and on `.dark`'s counterpart for light, then map them through **`@theme inline` with `var()` indirection** — that is what lets a utility resolve at the element and makes scoped theming work. **Never put literal values inside `@theme inline`**: Tailwind constant-folds them into the utility, no variable survives to override, and the build still succeeds. A non-inline `@theme` is strictly worse — it resolves the indirection once at `:root`, so a nested themed subtree never changes. Dark mode is the **`.dark` class**, matching shadcn's `@custom-variant dark (&:is(.dark *))`; because the class need only sit on an ancestor, scoped theming still works. Resolve the stored preference in a blocking inline script before first paint, keeping the `aira-theme` key.
+
+### Text-role contrast — retuned
+
+The four text roles are **solid ramp steps, not `color-mix()` alphas**, and every one clears WCAG AA 4.5:1 against the **worst-case** background of its theme — `--color-surface` on dark, `--color-bg` on light. Alpha tuning was tried first and rejected: reaching 4.5:1 collapses `muted` and `faint` onto the same value and flattens all three roles in the light theme. Ramp steps keep real separation, and Nocturne's own readme directs it — *prefer ramp steps over ad-hoc `color-mix()`*.
+
+`#636778` is the one value with no ramp origin: the light side has only three AA-passing steps and four roles need four. It sits 64% from `--color-neutral-600` toward `--color-neutral-700`.
+
+The remaining `--ui-*` entries — `hover`, `track`, `tint`, `active-bg`, `active-fg`, `link-hover` — are surfaces and marks, not text, and keep their `color-mix()` form.
 
 ## Compliance notes
 
