@@ -72,7 +72,8 @@ create table positions (
 ## Identity and membership
 
 ```sql
--- Global identity. Phone number is the primary identifier, not email.
+-- Global identity. See the auth note below: email for signup and admin,
+-- token-based invitation for employees (AD-7, AD-29).
 -- auth.users is Supabase-managed; app_metadata carries active tenant_id.
 
 create table memberships (

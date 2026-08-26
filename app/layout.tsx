@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { DARK_CLASS, DEFAULT_THEME, THEME_SCRIPT } from "./theme-script";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * Inter, self-hosted by `next/font`. Nocturne's own stylesheet pulls Inter
+ * from Google's font CDN; that stylesheet is vendored for provenance and never
+ * linked, so no request leaves for Google at runtime.
+ */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -26,8 +28,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="id"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The theme script rewrites `class` and `style` on this element before
+      // React hydrates, which is the whole point of running it before paint.
+      suppressHydrationWarning
+      className={`${inter.variable} ${DEFAULT_THEME === "dark" ? DARK_CLASS : ""} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
