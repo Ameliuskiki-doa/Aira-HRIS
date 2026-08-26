@@ -65,3 +65,7 @@ Findings surfaced by review that are real but not caused by, or not in scope for
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
   summary: The design system is documented nowhere a contributor is pointed at.
   evidence: CLAUDE.md's "Where things are" map lists only `docs/01`–`docs/07`, none of which were touched. The `@theme inline` trap, the `accent`→`brand` rename, the forbidden ramp steps and the arbitrary-value rule live only in CSS comments and in `_bmad-output/specs/.../design-system.md`, which CLAUDE.md never mentions. The same gap applies to the `AD-*` identifiers cited throughout the code.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The application shell itself — sidebar, header, five responsive bands, off-canvas drawer, theme toggle and the app-level wrapper layer — was split out of the DOM-test-harness spec and remains Story 1.3 in sprint tracking.
+  evidence: The combined spec measured ~2,700 tokens against a 1,600 target, and the harness is independently shippable: it can be reviewed, tested and merged on its own, and the shell's acceptance criteria (44px touch targets, focus trap, tooltip on focus) cannot be verified until it exists. Its draft spec is on disk and narrowed to the shell alone.
