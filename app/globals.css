@@ -197,10 +197,19 @@
      and keeps this hex in both themes. Written once so the two cannot drift. */
   --brand-dark: #9184d9; /* OKLCH hue 289.2 · L 0.660 · C 0.125 */
 
-  /* Spacing — Nocturne's 0.70× density scale. Declared as the token source of
-     truth; Tailwind's `--spacing` unit is deliberately left at its default for
-     now, so `p-4` is not yet `var(--space-4)`. Reconciling the two rescales
-     every shadcn component at once and belongs with the first real screen. */
+  /* Spacing — Nocturne's 0.70x density scale, kept as a reference token only.
+     `--space-*` is NOT wired into Tailwind and will not be: Tailwind's
+     `--spacing` unit stays at its 4px default, so `p-4` is 16px and never
+     `var(--space-4)`.
+
+     This was once written up as a pending decision. It is closed, and closing
+     it matters because the open version misled two readers into expecting a
+     rescale that will now never happen. The reason is arithmetic: every
+     dimension the shell specifies — 236px sidebar, 64px icon rail, 44px touch
+     target — is an exact multiple of 4px and expressible on Tailwind's scale
+     (59, 16, 11), and none is a multiple of 2.8px. Repointing `--spacing` at
+     `--space-1` would turn `min-h-11` into 30.8px and silently break the one
+     utility that guarantees the 44px minimum. */
   --space-1: 2.8px;
   --space-2: 5.6px;
   --space-3: 8.4px;

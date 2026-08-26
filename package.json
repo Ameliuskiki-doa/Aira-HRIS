@@ -11,7 +11,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run --project unit",
+    "test": "vitest run --project unit --project chromium",
+    "test:node": "vitest run --project unit",
+    "test:browser": "vitest run --project chromium",
     "test:isolation": "vitest run --project isolation"
   },
   "dependencies": {
@@ -28,12 +30,20 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/browser": "^4.1.11",
+    "@vitest/browser-playwright": "^4.1.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "eslint-plugin-tailwindcss": "^4.4.0",
+    "js-yaml": "^4.3.1",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

@@ -69,3 +69,19 @@ Findings surfaced by review that are real but not caused by, or not in scope for
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
   summary: The application shell itself — sidebar, header, five responsive bands, off-canvas drawer, theme toggle and the app-level wrapper layer — was split out of the DOM-test-harness spec and remains Story 1.3 in sprint tracking.
   evidence: The combined spec measured ~2,700 tokens against a 1,600 target, and the harness is independently shippable: it can be reviewed, tested and merged on its own, and the shell's acceptance criteria (44px touch targets, focus trap, tooltip on focus) cannot be verified until it exists. Its draft spec is on disk and narrowed to the shell alone.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: `REQUIRED_SUITES` proves a test file exists but never that it contains tests, so a suite emptied in place stays green.
+  evidence: The guard is an `existsSync` loop. Replacing any required suite with an empty file satisfies it completely. This is the Story 1.1 pattern inherited unchanged, not a regression introduced here, but it caps what every mutation guard built on top of it can promise.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: Vitest 4 treats an unmatched `--project` filter as a silent no-op — `vitest run --project doesnotexist` exits 0 with a green report.
+  evidence: Verified by a reviewer against the live tree. It means the `--project chromium` flag in the `test` script self-checks nothing; the entire guarantee that the browser project runs rests on `tests/harness-registration.test.ts` executing inside `unit`. That works today, but the margin is thinner than the config comments imply, and the same hazard applies to every future project filter in this repo.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: `optimizeDeps.include` is a hand-maintained list whose drift is only observable on a cold Vite cache.
+  evidence: The list exists because a cold cache made Vite re-optimise mid-test and fail with `Failed to fetch dynamically imported module`. Nothing detects a newly tested component pulling in an unlisted dependency, and a warm local run cannot surface it — the failure returns as an intermittent CI import error. The shell story adds several components and is the first place this will bite.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: `@testing-library/user-event` is installed but imported nowhere.
+  evidence: The spec's task named six dependencies; the focus-trap test correctly uses `userEvent` from `vitest/browser` instead, because that one drives real Playwright key input rather than dispatching synthetic events. The package is dead weight until the shell tests need it, which they may not.

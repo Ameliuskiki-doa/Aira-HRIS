@@ -1,15 +1,29 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
+
+/** `ROOT` keeps its trailing slash; an alias target must not have one. */
+const ROOT_NO_SLASH = ROOT.replace(/\/$/, "");
 
 /**
  * Suites whose disappearance must not read as success. A renamed or deleted
  * boundary suite would otherwise leave `npm test` green while nothing checks
  * that lib/domain is still pure.
  */
-const REQUIRED_SUITES = ["tests/boundary.test.ts", "tests/theme.test.ts"];
+const REQUIRED_SUITES = [
+  "tests/boundary.test.ts",
+  "tests/theme.test.ts",
+  // The DOM harness. Two files, and both have to be here. The smoke suite is
+  // the only thing that exercises a real browser; the registration suite is
+  // the only thing that notices if the browser project is unregistered, and it
+  // runs in `unit`, so deleting either one has to be as loud as deleting a
+  // boundary suite — including under `--project unit`.
+  "tests/browser/harness.test.tsx",
+  "tests/harness-registration.test.ts",
+];
 
 for (const suite of REQUIRED_SUITES) {
   if (!existsSync(new URL(suite, import.meta.url))) {
@@ -31,9 +45,80 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["tests/**/*.test.ts"],
-          exclude: ["tests/isolation/**", "node_modules/**", ".next/**"],
+          // `tests/browser/**` is excluded by path, not left to the .ts/.tsx
+          // extension difference. Without it a future `tests/browser/x.test.ts`
+          // is collected here and runs against no DOM at all — passing or
+          // failing for reasons that have nothing to do with the code.
+          exclude: [
+            "tests/isolation/**",
+            "tests/browser/**",
+            "node_modules/**",
+            ".next/**",
+          ],
           testTimeout: 300_000,
           hookTimeout: 300_000,
+        },
+      },
+      {
+        root: ROOT,
+        // The Node projects never needed this: they import by relative path.
+        // A component pulled in from `components/ui` imports `@/lib/utils`, so
+        // the browser project has to resolve the tsconfig alias itself.
+        resolve: {
+          alias: { "@": ROOT_NO_SLASH },
+        },
+        // On a cold Vite cache the browser project discovers these mid-run,
+        // re-optimises, and reloads the page under the running test — which
+        // Vitest reports as a failed import, not a retry. Naming them up front
+        // is the difference between a green first CI run and a flake.
+        optimizeDeps: {
+          include: [
+            "react",
+            "react/jsx-dev-runtime",
+            "react/jsx-runtime",
+            "react-dom",
+            "react-dom/client",
+            "@testing-library/react",
+            "@base-ui/react/dialog",
+            "@base-ui/react/button",
+            "class-variance-authority",
+            "clsx",
+            "lucide-react",
+            "tailwind-merge",
+          ],
+        },
+        test: {
+          name: "chromium",
+          // `.tsx` only, and `unit` also excludes this directory by path, so
+          // the two collections cannot overlap in either direction.
+          include: ["tests/browser/**/*.test.tsx"],
+          // Not the Node projects' 300s. That number was chosen for suites that
+          // compile CSS; here it only means a browser that fails to launch
+          // burns five minutes of a twenty-minute CI job before saying so. The
+          // hook budget stays larger because it covers the cold-start launch on
+          // a loaded runner; the tests themselves are milliseconds.
+          testTimeout: 20_000,
+          hookTimeout: 60_000,
+          browser: {
+            enabled: true,
+            headless: true,
+            // Vitest 4: `provider: "playwright"` as a string throws. The
+            // provider is a factory from a separate package.
+            provider: playwright({
+              // The state the shell's motion criteria will be asserted against,
+              // pinned once here so no later suite has to remember it. Note it
+              // is a media-feature only: nothing in `app/globals.css` or
+              // tw-animate-css branches on `prefers-reduced-motion` today, so
+              // it does not currently shorten any animation. What makes the
+              // Esc-close assertion robust is waiting for the popup to leave
+              // the DOM, not a guess about how long the exit takes.
+              contextOptions: { reducedMotion: "reduce" },
+            }),
+            // Nothing here is a visual test, and a failure screenshot is just
+            // an artifact to clean up in CI.
+            screenshotFailures: false,
+            instances: [{ browser: "chromium" }],
+          },
         },
       },
       {

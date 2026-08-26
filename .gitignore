@@ -51,3 +51,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# vitest browser mode (@vitest/browser) run artifacts
+__screenshots__/
+.vitest-dump/

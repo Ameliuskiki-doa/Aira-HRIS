@@ -2,8 +2,9 @@
 title: 'DOM test harness — a browser environment that can actually verify UI'
 type: 'chore'
 created: '2026-08-27'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: '63495b71fd98522154d3ff17a53dd808bb4fd571'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
 ---
@@ -54,10 +55,10 @@ All measured 2026-08-27 in a scratch mirror of this repo's exact versions. Nothi
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `package.json` -- add the six dependencies above; change `test` so every project runs, and keep a way to run the Node projects alone
-- [ ] `vitest.config.mts` -- add the browser project (headless chromium, `playwright()`, alias, `screenshotFailures: false`) without touching the existing projects; register the new suite in `REQUIRED_SUITES`
-- [ ] `.github/workflows/ci.yml` -- cache the Playwright browser, install `chromium-headless-shell`, run the browser project. Do not install full `chromium`
-- [ ] smoke suite -- **the harness must prove the three things jsdom cannot**, each asserted on a real measurement rather than on a class string or a source file: a Tailwind-compiled `calc()` utility resolving to a number, a rendered element reporting non-zero layout, and a Base UI overlay whose focus trap holds under repeated Tab, closes on `Esc`, and returns focus to its trigger. The suite must **fail if the browser project is removed, if it silently falls back to a non-browser environment, or if its registration is removed** — that property, not a list of cases, is the requirement
+- [x] `package.json` -- add the six dependencies above; change `test` so every project runs, and keep a way to run the Node projects alone
+- [x] `vitest.config.mts` -- add the browser project (headless chromium, `playwright()`, alias, `screenshotFailures: false`) without touching the existing projects; register the new suite in `REQUIRED_SUITES`
+- [x] `.github/workflows/ci.yml` -- cache the Playwright browser, install `chromium-headless-shell`, run the browser project. Do not install full `chromium`. **Assertions about CI must be structural** — parse the workflow's steps; a substring match is satisfied by a comment, and was
+- [x] smoke suite -- **the harness must prove the three things jsdom cannot**, each asserted on a real measurement rather than on a class string or a source file: a Tailwind-compiled `calc()` utility resolving to a number, a rendered element reporting non-zero layout, and a Base UI overlay whose focus trap holds under repeated Tab, closes on `Esc`, and returns focus to its trigger. The suite must **fail if the browser project is removed, if it silently falls back to a non-browser environment, or if its registration is removed** — that property, not a list of cases, is the requirement
 
 **Acceptance Criteria:**
 - Given `vitest run` with no project filter, when it completes, then the output shows both a Node project and the chromium project executing, and every suite passes.
@@ -65,6 +66,15 @@ All measured 2026-08-27 in a scratch mirror of this repo's exact versions. Nothi
 - Given the browser project is deleted from the config, when the full test command runs, then it fails — a harness that can be removed without a red build is not a harness.
 - Given a clean CI runner, when the workflow runs, then the browser project executes there too.
 - Given `npm run lint`, `npx tsc --noEmit` and `npm run build`, when they run, then all three still exit zero.
+
+## Spec Change Log
+
+**2026-08-27 — patch round, no loopback.**
+*Trigger:* three reviewers, 45 raw findings. The decisive one was reproduced twice: deleting the entire `Cache Playwright browsers` step from `ci.yml` left every assertion green, because `toContain("~/.cache/ms-playwright")` was satisfied by a comment in the same file. The anti-full-download guard also passed a bare `npx playwright install`, which fetches chromium, firefox and webkit.
+*Root cause:* this spec stated the mutation property for the smoke suite but said nothing about the CI assertions, so those were written as source-text matches — testing spelling, not behaviour.
+*Why no revert:* the config, dependencies and CI steps were independently verified correct by mutation before review; only assertions were weak, and they fix additively. Same call as Story 1.2, for the same reason.
+*Amended:* the CI task now requires structural assertions (parsed workflow steps, not substring matches) and states the mutation property for CI wiring, so a re-derivation keeps it.
+*KEEP:* the three core capability tests — `calc()` resolving to a number, non-zero layout, and the focus trap — and their mutation guards. The `optimizeDeps.include` list, which fixes a guaranteed first-CI-run flake found by deleting `node_modules/.vite`.
 
 ## Design Notes
 
