@@ -1,3 +1,5 @@
+import { UI_LOCALE } from "@/lib/locale";
+
 /**
  * Company timezones, and the day boundary the product runs on.
  *
@@ -42,11 +44,12 @@ export function zoneLabel(timeZone: string): string {
  */
 export function formatCompanyDate(date: Date, timeZone: string): string {
   try {
-    return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone }).format(
-      date,
-    );
+    return new Intl.DateTimeFormat(UI_LOCALE, {
+      dateStyle: "medium",
+      timeZone,
+    }).format(date);
   } catch {
-    return new Intl.DateTimeFormat("id-ID", {
+    return new Intl.DateTimeFormat(UI_LOCALE, {
       dateStyle: "medium",
       timeZone: "UTC",
     }).format(date);

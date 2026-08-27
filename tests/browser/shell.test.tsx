@@ -51,6 +51,7 @@ import {
   INDONESIAN_TIME_ZONES,
   zoneLabel,
 } from "@/components/shell/timezone";
+import { UI_LANG, UI_LOCALE } from "@/lib/locale";
 
 // The application's real stylesheet, compiled by the same Tailwind pipeline the
 // build uses. Without it every measurement below would be the browser's
@@ -1025,20 +1026,30 @@ describe("accessible names", () => {
 /* ── the header's one piece of logic ──────────────────────────────────────── */
 
 describe("the company's date and timezone", () => {
-  it("renders today in Indonesian, in the company's zone, with its local name", async () => {
+  it("renders today in the document's language, in the company's zone", async () => {
     renderShell();
     await page.viewport(1440, 900);
     const line = requireSlot("header-date");
-    await vi.waitFor(() =>
-      expect(line.textContent).toContain("·"),
-    );
+    await vi.waitFor(() => expect(line.textContent).toContain("·"));
 
-    // Two independent checks, because either alone is weak. The shape catches
-    // a switch to `en-US` ("Aug 27, 2026") or to `dateStyle: "full"`
-    // ("Kamis, 27 Agustus 2026"); the equality catches a switch of timezone,
-    // which the shape cannot see.
+    // Three checks, and the second is the one that was missing. The formatter
+    // sat on `id-ID` after the copy switched to English, so the header read
+    // "27 Agu 2026" beside ten English nav labels — and this test passed,
+    // because it named the same locale the code did. Tying the expectation to
+    // one shared constant is what makes them unable to drift: `app/layout.tsx`
+    // now takes its `lang` from the same module this formatter reads.
     expect(line.textContent).toMatch(/^\d{1,2} [A-Za-z]{3} \d{4} · WIB$/);
-    const expected = new Intl.DateTimeFormat("id-ID", {
+
+    const lang = UI_LANG;
+    const monthIn = (locale: string) =>
+      new Intl.DateTimeFormat(locale, {
+        month: "short",
+        timeZone: SHELL_COMPANY_FIXTURE.timeZone,
+      }).format(new Date());
+    expect(line.textContent).toContain(monthIn(lang));
+
+    // Exact equality still carries the timezone, which the shape cannot see.
+    const expected = new Intl.DateTimeFormat(UI_LOCALE, {
       dateStyle: "medium",
       timeZone: SHELL_COMPANY_FIXTURE.timeZone,
     }).format(new Date());

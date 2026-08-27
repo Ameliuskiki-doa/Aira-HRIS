@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+// Relative, not `@/`: this module is imported by `tests/theme.test.ts` in
+// the Node project, which carries no path alias — only the browser project
+// does. Changing that project's definition is an Ask First boundary.
+import { UI_LANG } from "../lib/locale";
 import "./globals.css";
 import { DARK_CLASS, DEFAULT_THEME, THEME_SCRIPT } from "./theme-script";
 
@@ -27,7 +31,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang={UI_LANG}
       // The theme script rewrites `class` and `style` on this element before
       // React hydrates, which is the whole point of running it before paint.
       suppressHydrationWarning
