@@ -34,6 +34,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Responsive bands ──────────────────────────────────────────────────────
+ * The shell has three boundaries, and only three: 768px (off-canvas drawer →
+ * 64px icon rail), 1200px (rail → 236px sidebar) and 1440px (full content
+ * padding). 1024px is *not* one of them — both 1024–1199 and 768–1023 are the
+ * rail, and what the design docs move at 1024 belongs to the dashboard's range
+ * control, not to the frame. An earlier version of this comment listed it, and
+ * a comment promising a boundary the code does not have is worse than none.
+ *
+ * Tailwind's `md` already sits on 768px exactly; the other two fall between
+ * its steps and have to be declared.
+ *
+ * As variants rather than `--breakpoint-*` theme keys, and not by preference:
+ * a breakpoint is read inside a media query, where a `var()` does not resolve,
+ * so a `--breakpoint-desk: var(--…)` entry could not work and a literal one
+ * would have to live in a plain `@theme` block — the non-inline form this
+ * file's header rules out and tests/theme.test.ts asserts against. A custom
+ * variant carries the literal in the one place it has to be literal and adds
+ * no token that pretends to be themeable.
+ *
+ *   desk — the sidebar band. Below it the nav is a rail or a drawer, nav items
+ *          rise to the 44px touch minimum, and the header drops its date line.
+ *   wide — the drawn composition at 1440px; content padding relaxes to 28px.
+ */
+@custom-variant desk (@media (width >= 1200px));
+@custom-variant wide (@media (width >= 1440px));
+
 /* ── Tier 1 — shadcn's semantic roles. Do not edit; see the header. ────────
  * Two documented deviations, both font lines, both forced:
  *
@@ -139,6 +165,22 @@
      key here there is no `font-body` utility and the token has no reader. */
   --font-body: var(--font-body);
 
+  /* The dense end of the type scale. The designed screens run at a 13px base
+     — Nocturne's own body is 15px — and their chrome goes down to 9px for the
+     uppercase kickers and group labels. Tailwind's default scale offers
+     nothing between `text-xs` (12px) and `text-sm` (14px) and nothing at all
+     below 12px, so four steps are added rather than reached for as arbitrary
+     values, which are lint-forbidden outside `components/ui/**` precisely so
+     the scale stays enumerable.
+
+     Only font-size: no `--text-*--line-height` companions, so these utilities
+     leave line-height inherited rather than resetting it, which is what the
+     stacked label/meta pairs in the shell want. */
+  --text-dense: var(--font-size-dense);
+  --text-2xs: var(--font-size-2xs);
+  --text-3xs: var(--font-size-3xs);
+  --text-4xs: var(--font-size-4xs);
+
   /* Elevation. Self-referential on purpose — the same shape shadcn generates
      for `--font-sans`: the theme key is declared here only so `shadow-md`
      compiles to `var(--shadow-md)` instead of Tailwind's own folded default,
@@ -224,6 +266,15 @@
   --font-heading: var(--font-inter), system-ui, sans-serif;
   --font-body: var(--font-inter), system-ui, sans-serif;
   --font-heading-weight: 500;
+  /* The raw sizes behind the `--text-*` keys above. Theme-invariant, so they
+     sit in this block and are deliberately not re-declared in `.dark`. They
+     are literals because a font size has no ramp to reference — the scale is
+     defined here and nowhere else, which is the same rule the colour ramps
+     follow one block up. */
+  --font-size-dense: 13px;
+  --font-size-2xs: 11px;
+  --font-size-3xs: 10px;
+  --font-size-4xs: 9px;
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
 

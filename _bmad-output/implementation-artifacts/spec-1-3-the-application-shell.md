@@ -2,8 +2,9 @@
 title: 'Story 1.3 — The application shell'
 type: 'feature'
 created: '2026-08-27'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: 'ca6e44fd0a288f82f2411e5f9964fe2338979ef1'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
   - '{project-root}/_bmad-output/specs/spec-aira-hris-payroll/screen-dashboard.md'
@@ -63,14 +64,14 @@ Probed empirically 2026-08-27 in a scratch mirror of this repo's exact versions;
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `package.json` -- add `@phosphor-icons/react@2.1.10`; no other new dependency
-- [ ] `app/theme-script.ts` -- add the writer that persists the preference and flips the class; keep the resolver total and the inline script unchanged
-- [ ] `components/app/` -- the wrapper layer: re-export the shell's primitives with Indonesian copy and token colours, so `components/ui/**` stays regenerable. Fix `bg-black/10` here, not there
-- [ ] `components/shell/navigation.ts` -- the four groups and their items as data: label, href, icon, group. One definition, consumed by sidebar, rail and drawer alike
-- [ ] `components/shell/` -- sidebar, header, nav item, theme toggle, company switcher (one-membership form only), drawer. Icons via `/ssr`; keep client boundaries as small as the interactivity requires
-- [ ] `app/(app)/layout.tsx` + placeholder segments -- the shell as a route-group layout, plus a stub route per nav destination so navigation and active state are real rather than mocked
-- [ ] `app/globals.css` -- correct the stale `--space-*` comment to record the closed verdict
-- [ ] `tests/browser/shell.test.tsx` -- **the suite must fail if any single one of these is removed:** a nav item from the definition, the `aria-current` binding, any `aria-label` on an icon-only control, the focus trap, the `Esc` handler, the backdrop handler, the close-on-navigation handler, the focus-return, any responsive band's rule, the theme writer, or the suite's own registration. That property, not a list of cases, is the requirement. **Assert on measured layout** — `getBoundingClientRect()` and resolved `getComputedStyle` in the real browser — never on class strings, which would re-create the enumeration trap that cost Stories 1.1 and 1.2
+- [x] `package.json` -- add `@phosphor-icons/react@2.1.10`; no other new dependency
+- [x] `app/theme-script.ts` -- add the writer that persists the preference and flips the class; keep the resolver total and the inline script unchanged
+- [x] `components/app/` -- the wrapper layer: re-export the shell's primitives with Indonesian copy and token colours, so `components/ui/**` stays regenerable. Fix `bg-black/10` here, not there
+- [x] `components/shell/navigation.ts` -- the four groups and their items as data: label, href, icon, group. One definition, consumed by sidebar, rail and drawer alike
+- [x] `components/shell/` -- sidebar, header, nav item, theme toggle, company switcher (one-membership form only), drawer. Icons via `/ssr`; keep client boundaries as small as the interactivity requires
+- [x] `app/(app)/layout.tsx` + placeholder segments -- the shell as a route-group layout, plus a stub route per nav destination so navigation and active state are real rather than mocked
+- [x] `app/globals.css` -- correct the stale `--space-*` comment to record the closed verdict
+- [x] `tests/browser/shell.test.tsx` -- **the suite must fail if any single one of these is removed:** a nav item from the definition, the `aria-current` binding, any `aria-label` on an icon-only control, the focus trap, the `Esc` handler, the backdrop handler, the close-on-navigation handler, the focus-return, any responsive band's rule, the theme writer, or the suite's own registration. That property, not a list of cases, is the requirement. **Assert on measured layout** — `getBoundingClientRect()` and resolved `getComputedStyle` in the real browser — never on class strings, which would re-create the enumeration trap that cost Stories 1.1 and 1.2
 
 **Acceptance Criteria:**
 - Given a stored light preference, when the toggle is pressed and the page reloaded, then light survives, and a second press returns to dark — proving the writer, not only the resolver.
@@ -78,6 +79,15 @@ Probed empirically 2026-08-27 in a scratch mirror of this repo's exact versions;
 - Given the drawer open, when Tab is pressed past the last item, then focus returns to the first and never reaches `<body>`.
 - Given any breakpoint, when the shell renders in both themes, then no element's accessible name is empty and no text below 12px resolves to `--ui-faint`.
 - Given `npm run lint`, `npx tsc --noEmit`, the full test run and `npm run build`, when all four run, then all four exit zero.
+
+## Spec Change Log
+
+**2026-08-27 — patch round, no loopback.**
+*Trigger:* three reviewers, ~80 raw findings. Six were demonstrated as running mutations that left the suite green at 38/38: forcing `activeSegment` to `null` (every route highlighting Dasbor), replacing the tooltip wrapper with a pass-through, switching the date formatter to `en-US`/UTC, raising the 13px base to 16px, freezing the theme toggle on one glyph, and showing the brand wordmark and group headings inside the 64px rail. The band table also sampled only interior widths, so a media query written `>= 769` would have passed every case.
+*Root cause:* the test task stated the mutation property correctly; the suite under-delivered against it. `labelsVisible` measured only the nav item's own span, so two band rules escaped a property the spec explicitly demanded.
+*Why no revert:* the production code was verified correct by reading `app-shell-route.tsx` and `header-date.tsx` and by re-running three mutations independently. Only assertions were blind, and they fix additively. Same call as Story 1.2.
+*Amended:* the test task now names the band rules individually and requires boundary widths, not interior samples.
+*KEEP:* the segment comparison in `AppShellRoute` rather than pathname matching — `/karyawan/123` must keep Data Karyawan active. The CSS icon swap in the theme toggle rather than React state, which is what avoids a wrong glyph on first paint. The `useSyncExternalStore` date snapshot, which is what keeps the server render safe.
 
 ## Design Notes
 

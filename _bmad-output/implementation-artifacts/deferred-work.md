@@ -85,3 +85,31 @@ Findings surfaced by review that are real but not caused by, or not in scope for
 - source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
   summary: `@testing-library/user-event` is installed but imported nowhere.
   evidence: The spec's task named six dependencies; the focus-trap test correctly uses `userEvent` from `vitest/browser` instead, because that one drives real Playwright key input rather than dispatching synthetic events. The package is dead weight until the shell tests need it, which they may not.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: `next/link` in the browser test project resolves to the Pages Router implementation, so the module under test is not the one the build ships.
+  evidence: Vite does not apply Next's app-dir alias, which is why the suite needs `tests/browser/next-env-shim.ts` and a capture-phase `preventDefault` to stop the iframe navigating. Component behaviour is asserted correctly, but every navigation assertion runs against a different module than production. The shim's must-be-first-import ordering is also enforced only by a comment rather than a `setupFiles` entry.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The `--color-popover` exemption in the undeclared-variable sweep is keyed on the variable name, not on whether the component that draws it is rendered.
+  evidence: Its stated justification is that `DrawerContent` is never rendered — true today, and nothing asserts it stays true. The name is an `@theme inline` key, so it emits no custom property; the moment a later story renders `DrawerContent`, its bleed layer resolves to nothing while the sweep stays green. The sweep is the repo's stated last line of defence against the stylesheet dropping a name a component still reads.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: `prefers-reduced-motion` is honoured only by the drawer; the nav item's `transition-colors` and the tooltip's enter animation are unguarded.
+  evidence: The story's matrix names only the drawer slide, so this is outside its scope rather than a miss — but the repo now has one guarded animation and two unguarded ones, and the reduced-motion test measures only the drawer panel and overlay, so the gap is invisible to it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The drawer offers no close button — only backdrop, `Esc`, and following a link.
+  evidence: Those three exits are exactly what `screen-dashboard-interaction.md` specifies, so the implementation is faithful to the contract. But the contract itself omits the affordance a touch user reaches for first, and this drawer is the mobile navigation for field staff on personal phones. A design decision to revisit, not an implementation defect.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: `company.membershipCount` is carried by the fixture and read by nothing.
+  evidence: `CompanySwitcher` hardcodes the one-membership form rather than branching on it, so a `membershipCount: 2` fixture would silently render the wrong thing. The multi-company panel belongs to Story 1.6; the branch and its test belong there with it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The header date never rolls over at midnight on a long-lived tab.
+  evidence: `useSyncExternalStore` is subscribed to a never-firing store, deliberately, so the value is a mount-time snapshot. In a product whose day boundary drives attendance and payroll periods, a tab left open overnight shows yesterday's date with no correction.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The product's screen inventory now exists only in `components/shell/navigation.ts`.
+  evidence: Ten destinations and a four-group information architecture were introduced without a line in `docs/05-modules.md` or anywhere else CLAUDE.md points a contributor. Two icon libraries also now ship — `lucide-react` survives, reachable from `components/ui/dialog.tsx` alone — with nothing recording whether it is being retired.

@@ -23,6 +23,11 @@ const REQUIRED_SUITES = [
   // boundary suite — including under `--project unit`.
   "tests/browser/harness.test.tsx",
   "tests/harness-registration.test.ts",
+  // The application shell (Story 1.3). It is the only thing that measures the
+  // responsive bands, the focus trap, the theme writer and the accessible
+  // names of the icon-only controls; losing it silently would leave the whole
+  // frame unverified.
+  "tests/browser/shell.test.tsx",
 ];
 
 for (const suite of REQUIRED_SUITES) {
@@ -81,6 +86,22 @@ export default defineConfig({
             "@testing-library/react",
             "@base-ui/react/dialog",
             "@base-ui/react/button",
+            // Added with the shell. Each of these is a separate entry point of
+            // @base-ui/react, and Vite optimises entry points independently:
+            // discovering one mid-run does not just reload the page, it hands
+            // the newly optimised chunk its own copy of React and every hook
+            // inside it throws "Invalid hook call". Measured, not guessed.
+            "@base-ui/react/avatar",
+            "@base-ui/react/drawer",
+            "@base-ui/react/separator",
+            "@base-ui/react/tooltip",
+            // The shell's icons and its links.
+            "@phosphor-icons/react/ssr",
+            "next/link",
+            // The shell suite renders the route adapter against the real
+            // `useSelectedLayoutSegment`, which means the real router context.
+            "next/navigation",
+            "next/dist/shared/lib/app-router-context.shared-runtime",
             "class-variance-authority",
             "clsx",
             "lucide-react",

@@ -146,6 +146,54 @@ const NOCTURNE_THEMED_VARS = [
 ] as const;
 
 /**
+ * Custom properties a vendored primitive writes onto its own element from
+ * JavaScript while it animates. The stylesheet cannot declare these and must
+ * not: a static value here would freeze the very numbers the primitive is
+ * updating per frame.
+ *
+ * Anchored at both ends, and every entry earns its place — the sweep below
+ * asserts that each pattern actually matches something, because a dead or
+ * unanchored pattern is an exemption nobody can see the size of.
+ */
+const PRIMITIVE_RUNTIME_VARS: readonly RegExp[] = [
+  /^--drawer-swipe-(progress|strength|movement-[xy])$/,
+  /^--drawer-snap-point-offset$/,
+  /^--drawer-frontmost-height$/,
+  /^--drawer-height$/,
+  /^--nested-drawers$/,
+  // Base UI's positioner writes this on a popup as it places it.
+  /^--transform-origin$/,
+];
+
+/**
+ * Properties a primitive offers the *consumer* to set — an inset, a bleed
+ * colour. Undeclared by design, because the default is "not set".
+ *
+ * The exemption is conditional rather than blanket: the sweep requires every
+ * reference to one of these to carry a fallback. A hook with no fallback is
+ * not a hook, it is a dangling reference, and this is what keeps the two apart.
+ */
+const PRIMITIVE_CUSTOMISATION_VARS: readonly RegExp[] = [
+  /^--drawer-inset$/,
+  /^--drawer-bleed-background$/,
+];
+
+/**
+ * References that resolve to nothing and are known to. One entry, and it is a
+ * defect in the generated file rather than a decision: shadcn's drawer uses
+ * `var(--color-popover)` as the fallback background of its bleed layer.
+ * `--color-popover` is a Tailwind *theme key*, and this stylesheet declares it
+ * inside `@theme inline`, which by definition emits no custom property — so
+ * the fallback resolves to nothing wherever it is drawn.
+ *
+ * Inert here: `components/app/drawer.tsx` composes the panel from the Base UI
+ * parts and never renders `DrawerContent`, which is the only thing that draws
+ * that layer. Recorded rather than corrected, because `shadcn add` overwrites
+ * the file and a hand-edit there would not survive.
+ */
+const VENDORED_DEAD_REFS: readonly RegExp[] = [/^--color-popover$/];
+
+/**
  * Radius is the one Nocturne value that could not be carried over as-is:
  * shadcn derives its whole chain by `calc()` from a single `--radius`, and its
  * components dereference `var(--radius-md)` directly. `--radius` is therefore
@@ -662,17 +710,94 @@ describe("theming", () => {
       f.startsWith(join("components", "ui") + "/"),
     );
     expect(primitives.length).toBeGreaterThan(0);
-    const referenced = new Set<string>();
+
+    /**
+     * Every dereference, in all three spellings Tailwind v4 and CSS produce.
+     * The first version matched only `var(--x)` with no fallback, which meant
+     * `var(--x, fallback)` and the `bg-(--x)` shorthand were never swept at
+     * all — most of the drawer's references, as it turned out.
+     */
+    const referencesIn = (source: string): Set<string> => {
+      const found = new Set<string>();
+      for (const [, name] of source.matchAll(/var\(\s*(--[\w-]+)\s*[,)]/g)) {
+        found.add(name);
+      }
+      // Tailwind v4's arbitrary-property shorthand: `bg-(--x)`, `w-(--x,auto)`.
+      for (const [, name] of source.matchAll(/[a-z\]]-\((--[\w-]+)[,)]/g)) {
+        found.add(name);
+      }
+      for (const name of [...found]) {
+        if (name.startsWith("--tw-")) found.delete(name);
+      }
+      return found;
+    };
+
+    /**
+     * Names a primitive declares on *itself*, as Tailwind's `[--name:value]`
+     * property utility. Collected per file rather than across the directory:
+     * pooling them let a `[--x:…]` in one component silence a dangling
+     * `var(--x)` in another, which is precisely the cross-file mistake this
+     * sweep exists to catch.
+     */
+    const declaredIn = (source: string): Set<string> =>
+      new Set(
+        Array.from(source.matchAll(/\[\s*(--[\w-]+)\s*:/g), (m) => m[1]),
+      );
+
+    let swept = 0;
+    const runtimeHits = new Map<RegExp, number>(
+      PRIMITIVE_RUNTIME_VARS.map((pattern) => [pattern, 0]),
+    );
+    const hookHits = new Map<RegExp, number>(
+      PRIMITIVE_CUSTOMISATION_VARS.map((pattern) => [pattern, 0]),
+    );
+    const deadHits = new Map<RegExp, number>(
+      VENDORED_DEAD_REFS.map((pattern) => [pattern, 0]),
+    );
+
     for (const file of primitives) {
-      for (const [, name] of read(file).matchAll(/var\(\s*(--[\w-]+)\s*\)/g)) {
-        if (!name.startsWith("--tw-")) referenced.add(name);
+      const source = read(file);
+      const selfDeclared = declaredIn(source);
+      for (const name of referencesIn(source)) {
+        if (selfDeclared.has(name)) continue;
+
+        const runtime = PRIMITIVE_RUNTIME_VARS.find((p) => p.test(name));
+        if (runtime) {
+          runtimeHits.set(runtime, runtimeHits.get(runtime)! + 1);
+          continue;
+        }
+        const hook = PRIMITIVE_CUSTOMISATION_VARS.find((p) => p.test(name));
+        if (hook) {
+          // Conditional: a consumer hook is only legitimate where the
+          // reference supplies its own default.
+          const escaped = name.replace(/[-]/g, "\\-");
+          expect(
+            new RegExp(`\\(\\s*${escaped}\\s*,`).test(source),
+            `${file} reads ${name} with no fallback — that is a dangling reference, not a customisation hook`,
+          ).toBe(true);
+          hookHits.set(hook, hookHits.get(hook)! + 1);
+          continue;
+        }
+        const dead = VENDORED_DEAD_REFS.find((p) => p.test(name));
+        if (dead) {
+          deadHits.set(dead, deadHits.get(dead)! + 1);
+          continue;
+        }
+
+        swept += 1;
+        expect(
+          declared,
+          `${file} dereferences undeclared ${name}`,
+        ).toContain(name);
       }
     }
-    expect(referenced.size).toBeGreaterThan(0);
-    for (const name of referenced) {
-      expect(declared, `components/ui dereferences undeclared ${name}`).toContain(
-        name,
-      );
+
+    // The sweep has to have swept something, and every exemption has to be
+    // covering a name that is really there. A pattern matching nothing is an
+    // allowance nobody can audit.
+    expect(swept).toBeGreaterThan(0);
+    for (const [pattern, hits] of [...runtimeHits, ...hookHits, ...deadHits]) {
+      expect(hits, `${pattern} exempts nothing and should be removed`).toBeGreaterThan(0);
     }
   });
 

@@ -45,6 +45,7 @@ const read = (rel: string) => readFileSync(resolve(ROOT, rel), "utf8");
 
 /** The shape this suite asserts on. The real type is a deep union of unions. */
 type ProjectShape = {
+  optimizeDeps?: { include?: string[] };
   test?: {
     name?: string;
     include?: string[];
@@ -134,6 +135,59 @@ describe("the browser project is registered", () => {
     expect(byName("unit")?.test?.include).toContain("tests/**/*.test.ts");
     expect(byName("unit")?.test?.include?.some((g) => g.endsWith(".tsx"))).toBe(false);
     expect(byName("unit")?.test?.exclude).toContain("tests/browser/**");
+  });
+});
+
+/**
+ * Every bare specifier the browser project has to pre-bundle up front.
+ *
+ * This list is not decoration and it is not derivable. Vite optimises entry
+ * points independently, and discovering one *during* a run does not merely
+ * reload the page — it hands the newly optimised chunk its own copy of React,
+ * and every hook inside it throws "Invalid hook call". Each entry below was
+ * added because its absence produced exactly that.
+ *
+ * The failure only reproduces on a cold cache, which is why it needs a test at
+ * all: locally the entry is already optimised from the previous run and the
+ * suite is green right up until CI, where it is not.
+ *
+ * Written out rather than derived. Deriving it from the suites' own imports
+ * would miss every one of these, because none of them is imported by a test —
+ * they are reached transitively through `components/`.
+ */
+const REQUIRED_OPTIMIZED_DEPS = [
+  "react",
+  "react-dom",
+  "@testing-library/react",
+  "@base-ui/react/avatar",
+  "@base-ui/react/button",
+  "@base-ui/react/dialog",
+  "@base-ui/react/drawer",
+  "@base-ui/react/separator",
+  "@base-ui/react/tooltip",
+  "@phosphor-icons/react/ssr",
+  "next/link",
+  "next/navigation",
+  "next/dist/shared/lib/app-router-context.shared-runtime",
+];
+
+describe("the browser project pre-bundles what its suites reach", () => {
+  const include = byName("chromium")?.optimizeDeps?.include;
+
+  it("names every dependency that must not be discovered mid-run", () => {
+    expect(include, "the chromium project declares no optimizeDeps").toBeDefined();
+    for (const dependency of REQUIRED_OPTIMIZED_DEPS) {
+      expect(
+        include,
+        `${dependency} is missing from optimizeDeps.include; a cold CI cache will fail with "Invalid hook call"`,
+      ).toContain(dependency);
+    }
+  });
+
+  it("lists each entry once", () => {
+    // A duplicate is harmless to Vite and a sign the list is being appended to
+    // without being read, which is how it drifts out of step with the suites.
+    expect(new Set(include).size).toBe(include?.length);
   });
 });
 
