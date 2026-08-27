@@ -2,8 +2,9 @@
 title: 'Story 1.5 — Sign up by email and create a company'
 type: 'feature'
 created: '2026-08-27'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: 'e6aa29d098e47e923e9f9f5328d13078a26649ee'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
   - '{project-root}/_bmad-output/specs/spec-aira-hris-payroll/data-model.md'
@@ -75,6 +76,15 @@ Measured 2026-08-27 against the live project and a local `postgres:17` carrying 
 - Given an owner with no tenant claim, when the shell renders, then the company's real legal name and timezone appear and nothing offers an edit that would silently affect zero rows.
 - Given `grep -rn "service_role" app lib components`, when it runs, then it finds nothing but the prohibition itself.
 - Given all five gates, when they run, then lint, typecheck, the unit and browser projects, the isolation project, and build all exit zero.
+
+## Spec Change Log
+
+**2026-08-27 — patch round, no loopback.**
+*Trigger:* three reviewers, one adversarial against the auth surface with container access. Four security defects were reproduced, not argued. An **open redirect** on the email-confirmation path: `safeRedirectPath` refused `//evil.example` and honoured `/\evil.example`, `/\/`, `/\t/` and `/\n//`, all of which `new URL()` resolves off-origin because WHATWG treats `\` as `/` and strips tab, LF and CR before parsing. **`x-forwarded-host` trusted unconditionally**, and that header builds `emailRedirectTo` — so a forged header mails a confirmation link carrying the PKCE code to an attacker's host. **No CSRF defence**: `readJson` never inspected `Content-Type`, so a cross-site `enctype="text/plain"` form could force a victim into the attacker's tenant. And **self-service billing**: `update organizations set plan='payroll'` returned `UPDATE 1`, letting a customer hand themselves the paid tier.
+*Root cause:* the test task stated a property, but an **inside-out** one. It named atomicity, retry, Zod, the service key, the field rules and session gating — what must be true — and never named what must be impossible. A suite can be complete against that property and blind to the front door. This is the same mistake as Stories 1.1, 1.3 and 1.4 in a fourth shape.
+*Why no revert:* the adversarial pass confirmed the core genuinely holds — cross-owner registration impossible, the advisory lock serialising six concurrent sessions into one organization, the credential guard surviving nineteen probes including a `role` nested in `app_metadata` and a Cyrillic homoglyph, the proxy matcher covering all seventeen routes, `getSession()` used nowhere, and Zod parsing before use in every handler. The defects were at the edges and fixed additively.
+*Amended:* the property is now stated from the outside — **no request may cause a redirect off-origin, a mail to an unverified host, a state change without same-origin intent, or a write the database itself would not permit.**
+*KEEP:* the credential allowlist that requires a key to prove it is publishable rather than naming what to reject — it refuses formats Supabase has not minted yet. The nullary client factories, which leave no parameter to smuggle a key through. The sign-in route deliberately *not* gated on an existing session, and its single failure message for every cause. `crossSiteRefusal` living inside `readJson` so a fourth handler cannot forget it. And `serverError()` taking no argument at all, which makes leaking a raw database message unavailable rather than merely discouraged.
 
 ## Design Notes
 
