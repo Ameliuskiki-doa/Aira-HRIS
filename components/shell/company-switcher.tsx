@@ -38,7 +38,7 @@ export function CompanySwitcher({ company }: CompanySwitcherProps) {
           data-slot="branch-count"
           className="text-2xs text-ui-muted shrink-0"
         >
-          {company.branchCount} cabang
+          {company.branchCount} {company.branchCount === 1 ? "branch" : "branches"}
         </span>
       )}
     </p>

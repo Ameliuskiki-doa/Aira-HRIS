@@ -1,12 +1,12 @@
 import { PlaceholderScreen } from "@/components/shell/placeholder-screen";
 
-export const metadata = { title: "Dasbor" };
+export const metadata = { title: "Dashboard" };
 
 export default function Page() {
   return (
     <PlaceholderScreen
-      title="Dasbor"
-      note="Ringkasan kehadiran, proses payroll berjalan, dan hal yang menunggu keputusan Anda muncul di sini mulai Epik 3."
+      title="Dashboard"
+      note="The summary cards, the attendance chart and the payroll run card arrive in Epic 3 and Epic 6."
     />
   );
 }

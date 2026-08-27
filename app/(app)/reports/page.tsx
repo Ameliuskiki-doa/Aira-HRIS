@@ -1,12 +1,12 @@
 import { PlaceholderScreen } from "@/components/shell/placeholder-screen";
 
-export const metadata = { title: "Absensi" };
+export const metadata = { title: "Reports" };
 
 export default function Page() {
   return (
     <PlaceholderScreen
-      title="Absensi"
-      note="Absensi, geofence outlet, dan penguncian periode dibangun pada Epik 2."
+      title="Reports"
+      note="Reporting is built after payroll runs exist; see Epic 6."
     />
   );
 }

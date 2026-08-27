@@ -20,14 +20,14 @@ export const metadata: Metadata = {
     template: "%s · Aira",
   },
   description:
-    "HRIS dan payroll sederhana untuk usaha kecil dan menengah di Indonesia.",
+    "Simple HRIS and payroll for small and medium businesses in Indonesia.",
   applicationName: "Aira",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="id"
+      lang="en"
       // The theme script rewrites `class` and `style` on this element before
       // React hydrates, which is the whole point of running it before paint.
       suppressHydrationWarning

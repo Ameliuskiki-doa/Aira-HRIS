@@ -1,12 +1,12 @@
 import { PlaceholderScreen } from "@/components/shell/placeholder-screen";
 
-export const metadata = { title: "Langganan" };
+export const metadata = { title: "Shift Schedule" };
 
 export default function Page() {
   return (
     <PlaceholderScreen
-      title="Langganan"
-      note="Paket, tagihan, dan pembayaran dibangun pada Epik 8."
+      title="Shift Schedule"
+      note="Shift patterns and roster assignment are built in Epic 4."
     />
   );
 }

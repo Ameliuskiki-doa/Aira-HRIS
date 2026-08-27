@@ -15,8 +15,8 @@ import { toggleTheme } from "@/app/theme-script";
  *
  * Two decisions worth stating:
  *
- * **The label names the action, not the state.** "Ganti tema" is true before
- * and after the press. A label that named the state ("Tema gelap") would be
+ * **The label names the action, not the state.** "Switch theme" is true before
+ * and after the press. A label that named the state ("Dark theme") would be
  * read by a screen reader as what the button *is* rather than what it does,
  * and would be wrong for half of the press.
  *
@@ -33,7 +33,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon-sm"
       data-slot="theme-toggle"
-      aria-label="Ganti tema"
+      aria-label="Switch theme"
       onClick={() => toggleTheme()}
     >
       <MoonIcon aria-hidden="true" className="size-3.5 dark:hidden" />

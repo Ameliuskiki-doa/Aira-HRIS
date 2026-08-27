@@ -211,7 +211,7 @@ Full rationale for each lives in the companion named in brackets.
 - Self-serve is mandatory, not aspirational: no manual onboarding, no training sessions, no price negotiation. [commercial-model]
 - A new configuration option is added only when **three separate clients** have asked for the same thing. One request is a custom demand, and the answer is no. [commercial-model]
 - Overdue accounts degrade to read-only, never blocked. Withholding access to payroll data is the fastest way to lose reputation. [commercial-model]
-- User-facing UI copy is Indonesian; documentation is English; Indonesian regulatory terms (PPh21, BPJS, PKWT, THR, lembur) stay in Indonesian. [conventions]
+- User-facing UI copy is English; documentation is English; Indonesian regulatory terms (PPh21, BPJS, PKWT, THR, lembur) stay in Indonesian. [conventions]
 
 ## Non-goals
 

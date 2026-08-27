@@ -1,12 +1,12 @@
 import { PlaceholderScreen } from "@/components/shell/placeholder-screen";
 
-export const metadata = { title: "Cuti" };
+export const metadata = { title: "Subscription" };
 
 export default function Page() {
   return (
     <PlaceholderScreen
-      title="Cuti"
-      note="Permohonan cuti dan alur persetujuannya dibangun pada Epik 4."
+      title="Subscription"
+      note="Plans, billing and invoices are built in Epic 8."
     />
   );
 }

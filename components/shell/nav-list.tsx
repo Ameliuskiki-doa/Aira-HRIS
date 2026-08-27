@@ -28,7 +28,7 @@ export function NavList({
   return (
     <nav
       data-slot="nav-list"
-      aria-label="Navigasi utama"
+      aria-label="Main navigation"
       className={cn("flex min-w-0 flex-col gap-4", className)}
     >
       {NAV_GROUPS.map((group) => {

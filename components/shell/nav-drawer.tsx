@@ -68,7 +68,7 @@ export function NavDrawer({
             data-slot="nav-drawer-trigger"
             // Icon-only, so the name has to be written. Without it the control
             // is announced as "button" and nothing else.
-            aria-label="Buka menu navigasi"
+            aria-label="Open navigation menu"
             className="md:hidden"
           />
         }
@@ -79,7 +79,7 @@ export function NavDrawer({
       <AppDrawerPanel className="gap-6 px-3.5 py-5">
         {/* Named for the accessibility tree; the brand below is the visible
             heading, and repeating it in type would be a second title. */}
-        <AppDrawerTitle className="sr-only">Navigasi</AppDrawerTitle>
+        <AppDrawerTitle className="sr-only">Navigation</AppDrawerTitle>
         <Brand planLabel={planLabel} variant="drawer" />
         <NavList
           activeSegment={activeSegment}

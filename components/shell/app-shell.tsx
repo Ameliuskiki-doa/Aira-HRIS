@@ -63,10 +63,10 @@ export function AppShell({
         */}
         <a
           data-slot="skip-link"
-          href="#konten-utama"
+          href="#main-content"
           className="bg-card text-foreground focus:translate-y-0 motion-reduce:transition-none fixed top-2 left-2 z-50 -translate-y-20 rounded-md px-3 py-2 shadow-md transition-transform"
         >
-          Lompat ke konten
+          Skip to content
         </a>
         <Sidebar activeSegment={activeSegment} planLabel={company.planLabel} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -88,7 +88,7 @@ export function AppShell({
             and the next Tab returns to the navigation the user just skipped.
           */}
           <main
-            id="konten-utama"
+            id="main-content"
             tabIndex={-1}
             className="flex min-w-0 flex-1 flex-col gap-5 px-5 pt-5 pb-10 outline-none wide:px-7 wide:pt-6"
           >

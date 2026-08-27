@@ -95,7 +95,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 - **NFR-17** — All mutations are route handlers with Zod validation; Server Actions are not used. *(AD-15)*
 - **NFR-18** — `lib/domain` is pure: no `next/*`, no React, no database client, no I/O. Enforced by lint. *(AD-2)*
 - **NFR-19** — A derived concept has exactly one implementation, exported from `lib/domain`. *(AD-23)*
-- **NFR-20** — User-facing strings are Indonesian; code and docs English; regulatory terms stay Indonesian.
+- **NFR-20** — User-facing strings are English; code and docs English; Indonesian regulatory terms (PPh21, BPJS, PKWT, THR, lembur) stay Indonesian. *(Reversed 2026-08-27 at the owner's direction; was Indonesian.)*
 - **NFR-21** — NIK, salary figures and PIN material are never logged. *(AD-19)*
 - **NFR-23** — In-tenant isolation: an employee session reads only its own row; `hr_staff` never sees salary. The isolation suite tests this **alongside** cross-tenant isolation. *(AD-31, AD-33)*
 - **NFR-24** — Attendance capture does not depend on a live access token; authentication happens at sync. *(AD-30)*
@@ -398,7 +398,7 @@ So that I have a tenant of my own without anyone from Aira touching the account.
 
 **Given** signup completes
 **When** the user lands in the application
-**Then** all user-facing copy is Indonesian.
+**Then** all user-facing copy is English, apart from Indonesian regulatory terms.
 
 ### Story 1.6: Membership, roles, and tenant context in the token
 

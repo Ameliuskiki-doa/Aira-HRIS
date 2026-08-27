@@ -37,12 +37,12 @@ export const SHELL_COMPANY_FIXTURE: ShellCompany = {
   legalName: "PT Nusantara Rasa",
   branchCount: 6,
   timeZone: "Asia/Jakarta",
-  planLabel: "Paket Bisnis",
+  planLabel: "Business Plan",
   membershipCount: 1,
 };
 
 export const SHELL_USER_FIXTURE: ShellUser = {
   name: "Sari Wijaya",
-  role: "Manajer HR",
+  role: "HR Manager",
   initials: "SW",
 };

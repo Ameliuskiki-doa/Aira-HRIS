@@ -388,16 +388,16 @@ describe("the measurement helpers", () => {
  * decision (which destinations exist) rather than the implementation.
  */
 const EXPECTED_NAV: ReadonlyArray<readonly [string, string, string | null]> = [
-  ["Dasbor", "/", null],
-  ["Laporan", "/laporan", "laporan"],
-  ["Data Karyawan", "/karyawan", "karyawan"],
-  ["Absensi", "/absensi", "absensi"],
-  ["Cuti", "/cuti", "cuti"],
-  ["Jadwal Shift", "/jadwal-shift", "jadwal-shift"],
-  ["Proses Payroll", "/payroll", "payroll"],
-  ["Persetujuan", "/persetujuan", "persetujuan"],
-  ["Konfigurasi", "/konfigurasi", "konfigurasi"],
-  ["Langganan", "/langganan", "langganan"],
+  ["Dashboard", "/", null],
+  ["Reports", "/reports", "reports"],
+  ["Employees", "/employees", "employees"],
+  ["Attendance", "/attendance", "attendance"],
+  ["Leave", "/leave", "leave"],
+  ["Shift Schedule", "/shifts", "shifts"],
+  ["Run Payroll", "/payroll", "payroll"],
+  ["Approvals", "/approvals", "approvals"],
+  ["Configuration", "/configuration", "configuration"],
+  ["Subscription", "/subscription", "subscription"],
 ];
 
 /** Where a nav item's stub route lives, as `import.meta.glob` keys it. */
@@ -466,7 +466,7 @@ describe("the active item", () => {
     for (const [label, , segment] of EXPECTED_NAV) {
       cleanup();
       // `__PAGE__` is how the router spells the index route; the hook turns it
-      // into `null`, which is the value the nav's `Dasbor` entry carries.
+      // into `null`, which is the value the nav's `Dashboard` entry carries.
       renderRoute(segment ?? "__PAGE__");
       const nav = requireSlot("nav-list");
       const current = within(nav).getAllByRole("link", { current: "page" });
@@ -476,7 +476,7 @@ describe("the active item", () => {
   });
 
   it("takes the active tokens and keeps its inset ring", () => {
-    renderShell("karyawan");
+    renderShell("employees");
     const active = within(requireSlot("nav-list")).getByRole("link", {
       current: "page",
     });
@@ -495,7 +495,7 @@ describe("the active item", () => {
     renderShell();
     await userEvent.keyboard("{Tab}{Tab}");
     const focused = document.activeElement as HTMLElement;
-    expect(focused).toHaveAccessibleName("Dasbor");
+    expect(focused).toHaveAccessibleName("Dashboard");
     const style = getComputedStyle(focused);
     // The rule is the design system's: 2px at 2px offset, never removed from a
     // row that gains hover styling.
@@ -531,7 +531,7 @@ describe("responsive bands", () => {
   for (const band of BANDS) {
     describe(`at ${band.width}px`, () => {
       it("lays the frame out as this band's rule requires", async () => {
-        renderShell("karyawan");
+        renderShell("employees");
         await page.viewport(band.width, 900);
 
         expect(widthOf(slot("sidebar"))).toBe(band.sidebarWidth);
@@ -553,7 +553,7 @@ describe("responsive bands", () => {
       });
 
       it("collapses the sidebar's own chrome with it", async () => {
-        renderShell("karyawan");
+        renderShell("employees");
         await page.viewport(band.width, 900);
         const sidebar = slot("sidebar");
 
@@ -590,7 +590,7 @@ describe("responsive bands", () => {
 
       if (band.sidebarWidth > 0) {
         it("draws its nav items at the height and labelling this band calls for", async () => {
-          renderShell("karyawan");
+          renderShell("employees");
           await page.viewport(band.width, 900);
           const nav = requireSlot("nav-list");
 
@@ -620,7 +620,7 @@ describe("responsive bands", () => {
         await page.viewport(band.width, 900);
         // Below 768px the sidebar is `display: none`, so its `<nav>` leaves the
         // accessibility tree entirely — there is no landmark until the drawer
-        // opens, and then exactly one. Two `<nav>`s sharing the name "Navigasi
+        // opens, and then exactly one. Two `<nav>`s sharing the name "Main navigation
         // utama" is the failure this pins against; the drawer suite asserts the
         // open case.
         expect(screen.queryAllByRole("navigation")).toHaveLength(
@@ -663,7 +663,7 @@ describe("the frame stays put", () => {
   it("puts a skip link ahead of the navigation and lands it on <main>", async () => {
     renderShell();
     const link = requireSlot("skip-link");
-    expect(link).toHaveAccessibleName("Lompat ke konten");
+    expect(link).toHaveAccessibleName("Skip to content");
 
     // Off screen until it is needed.
     expect(link.getBoundingClientRect().bottom).toBeLessThan(0);
@@ -722,10 +722,10 @@ describe("the rail's tooltip", () => {
     // link is first.
     await userEvent.keyboard("{Tab}{Tab}");
     const first = document.activeElement as HTMLElement;
-    expect(first).toHaveAccessibleName("Dasbor");
+    expect(first).toHaveAccessibleName("Dashboard");
 
     const tip = await vi.waitUntil(() => slot("app-tooltip-content"));
-    expect(tip).toHaveTextContent("Dasbor");
+    expect(tip).toHaveTextContent("Dashboard");
     const tipBox = tip.getBoundingClientRect();
     expect(tipBox.height).toBeGreaterThan(0);
     expect(tipBox.width).toBeGreaterThan(0);
@@ -761,7 +761,7 @@ describe("the rail's tooltip", () => {
     await page.viewport(1440, 900);
 
     await userEvent.keyboard("{Tab}{Tab}");
-    expect(document.activeElement).toHaveAccessibleName("Dasbor");
+    expect(document.activeElement).toHaveAccessibleName("Dashboard");
 
     await vi.waitFor(() => {
       const tip = slot("app-tooltip-content");
@@ -790,7 +790,7 @@ describe("the off-canvas drawer", () => {
   });
 
   it("opens to the specified width with its labels at the touch minimum", async () => {
-    renderShell("cuti");
+    renderShell("leave");
     const { panel } = await openDrawer();
 
     expect(panel.getBoundingClientRect().width).toBe(SIDEBAR_PX);
@@ -809,7 +809,7 @@ describe("the off-canvas drawer", () => {
     // Still exactly one active item, and it is the one for this route.
     const current = within(nav).getAllByRole("link", { current: "page" });
     expect(current).toHaveLength(1);
-    expect(current[0]).toHaveAccessibleName("Cuti");
+    expect(current[0]).toHaveAccessibleName("Leave");
 
     // And still exactly one navigation landmark: the sidebar's is
     // `display: none` at this width, so the two never compete.
@@ -880,7 +880,7 @@ describe("the off-canvas drawer", () => {
     renderShell();
     const { panel } = await openDrawer();
 
-    await userEvent.click(within(panel).getByRole("link", { name: "Absensi" }));
+    await userEvent.click(within(panel).getByRole("link", { name: "Attendance" }));
     await vi.waitFor(() => expect(slot("app-drawer-panel")).toBeNull());
   });
 
@@ -890,7 +890,7 @@ describe("the off-canvas drawer", () => {
 
     // Cmd/Ctrl-click opens a background tab; this page does not move, so
     // dismissing the menu the user is still reading is wrong.
-    await userEvent.click(within(panel).getByRole("link", { name: "Absensi" }), {
+    await userEvent.click(within(panel).getByRole("link", { name: "Attendance" }), {
       modifiers: ["ControlOrMeta"],
     });
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -1174,7 +1174,7 @@ describe("the frame itself", () => {
     for (const theme of ["dark", "light"] as const) {
       setTheme(theme);
       cleanup();
-      renderShell("langganan");
+      renderShell("subscription");
       const faint = resolvedToken("--ui-faint");
       const shell = requireSlot("app-shell");
 
@@ -1222,14 +1222,14 @@ describe("the frame itself", () => {
     renderShell();
     const pill = requireSlot("company-switcher");
     expect(pill).toHaveTextContent(SHELL_COMPANY_FIXTURE.legalName);
-    expect(pill).toHaveTextContent(`${SHELL_COMPANY_FIXTURE.branchCount} cabang`);
+    expect(pill).toHaveTextContent(`${SHELL_COMPANY_FIXTURE.branchCount} branches`);
     // A single membership gets no control at all — not a disabled one, which a
     // screen reader would still announce as something to operate.
     expect(within(pill).queryByRole("button")).toBeNull();
     expect(pill.querySelectorAll("svg")).toHaveLength(1);
   });
 
-  it("says nothing rather than '0 cabang' for a company with no branches", () => {
+  it("says nothing rather than '0 branches' for a company with no branches", () => {
     render(
       <AppShell
         activeSegment={null}
@@ -1240,7 +1240,7 @@ describe("the frame itself", () => {
       </AppShell>,
     );
     // Every company created in Story 1.5 starts here.
-    expect(requireSlot("company-switcher")).not.toHaveTextContent("cabang");
+    expect(requireSlot("company-switcher")).not.toHaveTextContent("branch");
     expect(slot("branch-count")).toBeNull();
   });
 });
