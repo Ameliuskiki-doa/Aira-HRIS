@@ -30,7 +30,7 @@ Rejected alternatives:
 Claim extraction, wrapped in a STABLE function:
 
 ```sql
-create function auth.tenant_id() returns uuid
+create function public.tenant_id() returns uuid
 language sql stable as $$
   select nullif(
     current_setting('request.jwt.claims', true)::json
@@ -46,8 +46,8 @@ alter table attendances enable row level security;
 alter table attendances force row level security;
 
 create policy tenant_isolation on attendances
-  using (tenant_id = (select auth.tenant_id()))
-  with check (tenant_id = (select auth.tenant_id()));
+  using (tenant_id = (select public.tenant_id()))
+  with check (tenant_id = (select public.tenant_id()));
 ```
 
 Without `(select ...)` the function runs once per row. On a multi-million-row attendance table this is a 10–100× difference and is the single most likely cause of an unnecessary compute tier upgrade.

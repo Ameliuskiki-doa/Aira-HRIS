@@ -34,7 +34,7 @@ Violating any of them is a bug, not a style preference.
 
 1. **`tenant_id` on every table.** No exceptions, including lookup and log tables.
 2. **RLS on every table**, and `tenant_id` must be the leading column of every index.
-3. **Wrap JWT claims in `(select ...)` inside policies.** `using (tenant_id = (select auth.tenant_id()))`. Without the subquery Postgres re-evaluates per row.
+3. **Wrap JWT claims in `(select ...)` inside policies.** `using (tenant_id = (select public.tenant_id()))`. Without the subquery Postgres re-evaluates per row.
 4. **`tenant_id` lives in `app_metadata`, never `user_metadata`.** `user_metadata` is user-writable.
 5. **Workers never use `service_role`.** Use a dedicated role with `FORCE ROW LEVEL SECURITY` and set the tenant context per transaction.
 6. **Money is integer rupiah, rounded per component.** Never float, never decimal-as-string. Every component result is rounded as it is written, so gross/net are exact sums of their stored lines. See `docs/07-conventions-and-testing.md`.

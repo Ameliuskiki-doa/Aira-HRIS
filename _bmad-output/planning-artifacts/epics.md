@@ -77,7 +77,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 ### NonFunctional Requirements
 
 - **NFR-1** — `tenant_id` on every table except global `stat_*`; RLS enabled **and** forced; every index leads with `tenant_id`. *(AD-5, AD-16, AD-18)*
-- **NFR-2** — Policies wrap claims as `(select auth.tenant_id())`; without the subquery Postgres re-evaluates per row. *(AD-18)*
+- **NFR-2** — Policies wrap claims as `(select public.tenant_id())`; without the subquery Postgres re-evaluates per row. *(AD-18)*
 - **NFR-3** — `tenant_id` = `company_id` = one legal entity; lives in `app_metadata`, never `user_metadata`. *(AD-8, AD-10)*
 - **NFR-4** — Workers never use `service_role`; no cross-tenant bypass role; exactly two tenant-context providers. *(AD-6, AD-16)*
 - **NFR-5** — Money is integer rupiah, rounded per component at write; gross and net are exact sums of stored lines. *(AD-13, AD-14)*
@@ -352,11 +352,11 @@ So that a cross-tenant leak is caught by CI rather than by a client.
 **Given** the first migration
 **When** it creates `organizations` and `companies`
 **Then** the same file enables row level security, forces it, creates the tenant policy, and creates a `tenant_id`-leading index
-**And** it creates the `auth.tenant_id()` function as a `stable` function reading `app_metadata`.
+**And** it creates the `public.tenant_id()` function as a `stable` function reading `app_metadata`.
 
 **Given** any tenant policy in the codebase
 **When** it is inspected
-**Then** the claim is wrapped as `(select auth.tenant_id())`.
+**Then** the claim is wrapped as `(select public.tenant_id())`.
 
 **Given** fixtures for two tenants
 **When** the isolation suite runs as tenant A
@@ -366,7 +366,7 @@ So that a cross-tenant leak is caught by CI rather than by a client.
 **Given** the `public` schema
 **When** the catalog sweep runs
 **Then** it reports zero tables without RLS enabled and a policy
-**And** the `stat_*` tables and the pg-boss schema are the only allowlisted exemptions, named explicitly.
+**And** the allowlisted exemptions are named explicitly and are exactly three: `stat_*`, the pg-boss schema, and the tables at or above the tenant boundary (`organizations`, `companies`), which are exempt from the `tenant_id` **column** requirement only and still require RLS, force, and a policy.
 
 **Given** a pull request that adds a table without a policy
 **When** CI runs
