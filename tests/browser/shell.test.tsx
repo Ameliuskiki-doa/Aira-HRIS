@@ -32,7 +32,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { commands, page, userEvent } from "vitest/browser";
 import { LayoutRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
-import AppLayout from "@/app/(app)/layout";
 import {
   DARK_CLASS,
   THEME_SCRIPT,
@@ -41,6 +40,7 @@ import {
   type Theme,
 } from "@/app/theme-script";
 import { AppShell } from "@/components/shell/app-shell";
+import { AppShellRoute } from "@/components/shell/app-shell-route";
 import {
   SHELL_COMPANY_FIXTURE,
   SHELL_USER_FIXTURE,
@@ -177,18 +177,23 @@ function routerTree(segment: string) {
  * This is the hop the rest of the file cannot see. `AppShell` takes
  * `activeSegment` as a value, so every case below proves the binding from that
  * value to `aria-current` and none of them proves that anything computes the
- * value. Hardcoding `activeSegment={null}` in the adapter, or deleting
- * `app/(app)/layout.tsx` outright, was green across the whole suite.
+ * value. Hardcoding `activeSegment={null}` in the adapter was green across the
+ * whole suite.
+ *
+ * The adapter, not `app/(app)/layout.tsx`. Story 1.5 made the layout an async
+ * Server Component that reads the session and the company, which no browser
+ * test can render — and the segment was never the layout's job anyway. That
+ * the layout renders this adapter, gated on a session and carrying the real
+ * company, is asserted in `tests/signup-boundary.test.ts`.
  */
 function renderRoute(segment: string) {
   return render(
     <LayoutRouterContext.Provider
       value={{ parentTree: routerTree(segment) } as never}
     >
-      {/* The generated `LayoutProps<"/">` requires `params`; "/" has none. */}
-      <AppLayout params={Promise.resolve({})}>
+      <AppShellRoute company={SHELL_COMPANY_FIXTURE}>
         <p>Isi halaman</p>
-      </AppLayout>
+      </AppShellRoute>
     </LayoutRouterContext.Provider>,
   );
 }
@@ -408,6 +413,20 @@ function pageModuleKey(segment: string | null): string {
     : `../../app/(app)/${segment}/page.tsx`;
 }
 
+/**
+ * Routes under `(app)` that the sidebar deliberately does not list, and how a
+ * user gets to each one instead.
+ *
+ * Declared rather than filtered out. "Every route is either in the nav or in
+ * this list" stays a real property; "every route except the ones the glob
+ * happened to skip" is not one.
+ */
+const REACHED_WITHOUT_THE_NAV: Record<string, string> = {
+  "../../app/(app)/company/new/page.tsx":
+    "Reached from the email confirmation callback. Adding it to the sidebar " +
+    "would offer a second registration to a tenant that already has one.",
+};
+
 describe("the navigation is one definition", () => {
   it("holds exactly the destinations the design specifies", () => {
     expect(
@@ -415,13 +434,27 @@ describe("the navigation is one definition", () => {
     ).toEqual(EXPECTED_NAV.map((entry) => [...entry]));
   });
 
-  it("has one stub route per destination, and no route without one", () => {
+  it("has one stub route per destination, and no route without a way in", () => {
     // Set equality in both directions. A missing route breaks navigation; an
-    // orphan route is a destination with no way to reach it.
+    // orphan route is a destination with no way to reach it — so a route that
+    // is deliberately absent from the nav has to be declared, with the reason,
+    // rather than merely tolerated.
     expect(Object.keys(PAGE_MODULES).sort()).toEqual(
-      EXPECTED_NAV.map(([, , segment]) => pageModuleKey(segment)).sort(),
+      [
+        ...EXPECTED_NAV.map(([, , segment]) => pageModuleKey(segment)),
+        ...Object.keys(REACHED_WITHOUT_THE_NAV),
+      ].sort(),
     );
   });
+
+  it.each(Object.entries(REACHED_WITHOUT_THE_NAV))(
+    "%s states how it is reached instead",
+    (_route, reason) => {
+      // A route excused from the nav without a reason is how "no way in"
+      // becomes a habit. The length floor is crude on purpose: it rejects "n/a".
+      expect(reason.trim().length).toBeGreaterThan(40);
+    },
+  );
 
   it("renders every one of those routes without throwing", async () => {
     for (const [label, , segment] of EXPECTED_NAV) {

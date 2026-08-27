@@ -35,6 +35,36 @@ export const REQUIRED_SUITES = [
   // included, not just the isolation project nobody runs locally.
   "tests/isolation/catalog-sweep.test.ts",
   "tests/isolation/tenant-purity.test.ts",
+  // Signup's only write (Story 1.5). The only thing that forces the company
+  // insert to fail and then proves no organization survived it, and the only
+  // thing that proves a retry resumes instead of creating a second one.
+  // Neither property is visible to the sweep or to the purity suite.
+  "tests/isolation/signup-rpc.test.ts",
+  // What a request may write, asked as an attacker rather than as the
+  // application (Story 1.5 hardening). The only thing that proves the paid
+  // tier is not self-service and that the Zod length bounds are also the
+  // database's. Both holes were reproduced against a live container.
+  "tests/isolation/write-surface.test.ts",
+  // The signup boundary (Story 1.5), in `unit` because it needs no database:
+  // the session gate, the Zod gate, and the closed time-zone set. Losing it
+  // would leave every route handler in the product unguarded and green.
+  "tests/signup-boundary.test.ts",
+  // The elevated-key prohibition (Story 1.5). CLAUDE.md rule 5 had no
+  // machinery at all before this suite -- recorded in deferred-work as the
+  // invariant that got none while core purity got sixty denials.
+  "tests/supabase-clients.test.ts",
+  // The front door (Story 1.5 hardening). Redirect safety, host trust,
+  // cross-site intent, and what a failure tells the caller. Every case in it
+  // was a reproduced defect that needed no malformed body, no invalid schema
+  // and no missing session -- which is why the suites built around those three
+  // were green and blind.
+  "tests/request-surface.test.ts",
+  // The session refresh (Story 1.5). The only thing that proves an expired
+  // access token leaves the proxy pass refreshed *and persisted* -- the half a
+  // Server Component render structurally cannot do. With a 900s TTL (AD-9) its
+  // absence is a user thrown out mid-form, and a middleware that refreshed
+  // nothing would look identical from the outside.
+  "tests/session-refresh.test.ts",
   // The two halves of the harness that need no database, and therefore run in
   // `unit` on every `npm test`: the guard that notices the isolation *project*
   // being unregistered or dropped from CI, and the pure functions the sweep's
@@ -60,6 +90,14 @@ export default defineConfig({
     projects: [
       {
         root: ROOT,
+        // Route handlers and the modules under them import through the `@/`
+        // alias, like the rest of the application. Without this the unit
+        // project cannot import the code it is meant to be testing, and the
+        // alternative -- relative imports in `app/` alone -- would make the
+        // shipped code differ from every other file in the repo.
+        resolve: {
+          alias: { "@": ROOT_NO_SLASH },
+        },
         test: {
           name: "unit",
           include: ["tests/**/*.test.ts"],

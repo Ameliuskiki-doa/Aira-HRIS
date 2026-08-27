@@ -103,6 +103,8 @@ describe("the suites cannot vanish quietly", () => {
   it.each([
     "tests/isolation/catalog-sweep.test.ts",
     "tests/isolation/tenant-purity.test.ts",
+    "tests/isolation/signup-rpc.test.ts",
+    "tests/isolation/write-surface.test.ts",
     "tests/isolation-registration.test.ts",
     "tests/isolation-guards.test.ts",
   ])("%s is in REQUIRED_SUITES", (suite) => {

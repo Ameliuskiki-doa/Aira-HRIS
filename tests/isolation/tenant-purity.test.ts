@@ -198,8 +198,11 @@ describe("a write carrying another tenant's key", () => {
   it("cannot create an organization owned by someone else", () => {
     const attempt = asPrincipal(PRINCIPAL_A, (client) =>
       client.query(
-        `insert into public.organizations (name, owner_user_id, plan)
-         values ('Grup Disusupi', $1, 'free')`,
+        // `plan` is deliberately not named. `authenticated` holds no INSERT
+        // privilege on that column, so naming it would make this fail with
+        // 42501 for a privilege reason and stop testing the policy at all.
+        `insert into public.organizations (name, owner_user_id)
+         values ('Grup Disusupi', $1)`,
         [PRINCIPAL_B.userId],
       ),
     );
@@ -248,8 +251,9 @@ describe("the signup path", () => {
       },
       async (client) => {
         const organization = await client.query<{ id: string }>(
-          `insert into public.organizations (name, owner_user_id, plan)
-           values ('Grup Baru', $1, 'free') returning id`,
+          // `plan` is not named: it is not a column a request path may write.
+          `insert into public.organizations (name, owner_user_id)
+           values ('Grup Baru', $1) returning id`,
           [PRINCIPAL_FRESH.userId],
         );
         const organizationId = organization.rows[0]?.id;
