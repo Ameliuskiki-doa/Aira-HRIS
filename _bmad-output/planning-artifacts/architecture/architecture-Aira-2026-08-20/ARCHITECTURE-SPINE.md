@@ -58,7 +58,7 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 
 | Inherited | Binds here |
 |---|---|
-| `tenant_id` on every table except global `stat_*`; RLS enabled **and** forced; policies wrap claims as `(select public.tenant_id())`; every index leads with `tenant_id` | AD-5, AD-16, AD-18 |
+| `tenant_id` on every table except global `stat_*`, the pg-boss schema, and the two tables at or above the tenant boundary; RLS enabled **and** forced; policies wrap claims as `(select public.tenant_id())`; every table carries at least one valid, non-partial index leading with the column its policy is keyed on | AD-5, AD-16, AD-18 |
 | `tenant_id` = `company_id` = one legal entity; lives in `app_metadata`, never `user_metadata` | AD-8, AD-10 |
 | Workers never use `service_role`; no cross-tenant bypass role | AD-6, AD-16 |
 | Money is integer rupiah, rounded per component at write | AD-13, AD-14 |

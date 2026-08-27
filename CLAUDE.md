@@ -33,7 +33,7 @@ These come from decisions already made. Do not revisit them without being asked.
 Violating any of them is a bug, not a style preference.
 
 1. **`tenant_id` on every table.** No exceptions, including lookup and log tables.
-2. **RLS on every table**, and `tenant_id` must be the leading column of every index.
+2. **RLS enabled *and* forced on every table**, and every table carries at least one valid, non-partial index whose **leading column is the column its policy is keyed on** — `tenant_id` everywhere, except `organizations` and `companies`, which sit at or above the tenant boundary and key on ownership and on `id`. That index is the access path every policy takes. *(Corrected 2026-08-27: this rule previously said `tenant_id` must lead **every** index, which no table can satisfy — an `id` primary key is an index leading with `id`.)*
 3. **Wrap JWT claims in `(select ...)` inside policies.** `using (tenant_id = (select public.tenant_id()))`. Without the subquery Postgres re-evaluates per row.
 4. **`tenant_id` lives in `app_metadata`, never `user_metadata`.** `user_metadata` is user-writable.
 5. **Workers never use `service_role`.** Use a dedicated role with `FORCE ROW LEVEL SECURITY` and set the tenant context per transaction.

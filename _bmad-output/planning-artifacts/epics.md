@@ -76,7 +76,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 
 ### NonFunctional Requirements
 
-- **NFR-1** — `tenant_id` on every table except global `stat_*`; RLS enabled **and** forced; every index leads with `tenant_id`. *(AD-5, AD-16, AD-18)*
+- **NFR-1** — `tenant_id` on every table except global `stat_*`, the pg-boss schema, and the two tables at or above the tenant boundary; RLS enabled **and** forced; every table carries at least one valid, non-partial index leading with the column its policy is keyed on. *(AD-5, AD-16, AD-18. Corrected 2026-08-27: "every index leads with `tenant_id`" is unsatisfiable — an `id` primary key is an index leading with `id`.)*
 - **NFR-2** — Policies wrap claims as `(select public.tenant_id())`; without the subquery Postgres re-evaluates per row. *(AD-18)*
 - **NFR-3** — `tenant_id` = `company_id` = one legal entity; lives in `app_metadata`, never `user_metadata`. *(AD-8, AD-10)*
 - **NFR-4** — Workers never use `service_role`; no cross-tenant bypass role; exactly two tenant-context providers. *(AD-6, AD-16)*
