@@ -84,7 +84,7 @@ The dashboard overrides these downward throughout (see `screen-dashboard.md`) �
 
 ## Component classes — superseded
 
-> **Superseded by AD-36.** Nocturne is vendored as the **token** source only. Components come from shadcn on Radix, copied into the repo and styled with Nocturne tokens through Tailwind v4's non-inline `@theme`. The nine classes below are documented because the screen specs were written against them and because they define the intended *shape* of each component — but application code does not use them.
+> **Superseded by AD-36.** Nocturne is vendored as the **token** source only. Components come from shadcn on Base UI, copied into the repo and styled with Nocturne tokens through Tailwind v4's `@theme inline` plus `var()` indirection (see the theming note below — an earlier wording said non-inline and was wrong). The nine classes below are documented because the screen specs were written against them and because they define the intended *shape* of each component — but application code does not use them.
 
 **Class → component mapping**
 

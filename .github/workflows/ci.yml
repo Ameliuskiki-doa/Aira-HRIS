@@ -28,6 +28,27 @@ jobs:
 
       - run: npm run typecheck
 
+      # The DOM harness project runs a real headless Chromium. The browser
+      # build id is fixed per Playwright release, so the lockfile hash is an
+      # exact cache key — a hit means no download at all.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # `chromium-headless-shell` only: 19s and 199 MB, against 46s and 554 MB
+      # for the full `chromium` build, 355 MB of which is never touched —
+      # Vitest launches `chrome-headless-shell` in headless mode regardless.
+      - run: npx playwright install chromium-headless-shell
+
+      # System libraries are installed outside ~/.cache/ms-playwright, so a
+      # cache hit still needs this step. It downloads no browser.
+      - run: npx playwright install-deps chromium-headless-shell
+
+      # Runs the Node `unit` project and the chromium DOM harness. If the
+      # harness stops being registered, tests/harness-registration.test.ts
+      # fails here rather than the browser project silently vanishing.
       - run: npm test
 
       # Catches what the other three cannot — malformed CSS among them.

@@ -95,7 +95,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 - **NFR-17** — All mutations are route handlers with Zod validation; Server Actions are not used. *(AD-15)*
 - **NFR-18** — `lib/domain` is pure: no `next/*`, no React, no database client, no I/O. Enforced by lint. *(AD-2)*
 - **NFR-19** — A derived concept has exactly one implementation, exported from `lib/domain`. *(AD-23)*
-- **NFR-20** — User-facing strings are Indonesian; code and docs English; regulatory terms stay Indonesian.
+- **NFR-20** — User-facing strings are English; code and docs English; Indonesian regulatory terms (PPh21, BPJS, PKWT, THR, lembur) stay Indonesian. *(Reversed 2026-08-27 at the owner's direction; was Indonesian.)*
 - **NFR-21** — NIK, salary figures and PIN material are never logged. *(AD-19)*
 - **NFR-23** — In-tenant isolation: an employee session reads only its own row; `hr_staff` never sees salary. The isolation suite tests this **alongside** cross-tenant isolation. *(AD-31, AD-33)*
 - **NFR-24** — Attendance capture does not depend on a live access token; authentication happens at sync. *(AD-30)*
@@ -105,7 +105,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 
 ### Additional Requirements
 
-**🚨 STARTER TEMPLATE — affects Epic 1 Story 1.** The architecture binds `create-next-app` with `--typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"` (AD-28). `--no-src-dir` is required so `lib/` sits at root per AD-1. **The repo is not empty** (`docs/`, `_bmad/`, `_bmad-output/`, `.claude/`, `CLAUDE.md`, `.mcp.json`), and `create-next-app` refuses to write into a directory with conflicting files — so the scaffold is created in a temporary directory and merged in. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block. **Tailwind is taken:** components come from shadcn on Radix (AD-36), styled by utilities that resolve to Nocturne tokens. Nocturne supplies tokens only; its component classes go unused.
+**🚨 STARTER TEMPLATE — affects Epic 1 Story 1.** The architecture binds `create-next-app` with `--typescript --app --eslint --tailwind --no-src-dir --import-alias "@/*"` (AD-28). `--no-src-dir` is required so `lib/` sits at root per AD-1. **The repo is not empty** (`docs/`, `_bmad/`, `_bmad-output/`, `.claude/`, `CLAUDE.md`, `.mcp.json`), and `create-next-app` refuses to write into a directory with conflicting files — so the scaffold is created in a temporary directory and merged in. The starter's generated `AGENTS.md` is replaced by the `bmad-project-context` managed block. **Tailwind is taken:** components come from shadcn on Base UI (AD-36), styled by utilities that resolve to Nocturne tokens. Nocturne supplies tokens only; its component classes go unused.
 
 - Single repo, two runtimes: `lib/domain` imported by both Next.js (dry-run) and `worker/index.ts` (batch). *(AD-1)*
 - ESLint import-boundary rule enforcing core purity. *(AD-2)*
@@ -128,7 +128,7 @@ This document provides the complete epic and story breakdown for Aira, decomposi
 ### UX Design Requirements
 
 - **UX-DR1** — Declare the eleven `--ui-*` semantic tokens (`body`, `muted`, `faint`, `nav`, `hover`, `track`, `tint`, `active-bg`, `active-fg`, `accent-text`, `link-hover`) per theme in application CSS. They are **not** part of Nocturne; without them the dashboard renders unstyled. *(AD-22)*
-- **UX-DR2** — Vendor Nocturne `styles.css` unmodified as the **token** source of truth and feed it to Tailwind v4 via `@theme inline` with `var()` indirection. Its nine component classes go unused. Components come from shadcn on Radix, copied into the repo and styled with those tokens. Arbitrary Tailwind values (`p-[13px]`) are lint-forbidden. *(AD-22, AD-36)*
+- **UX-DR2** — Vendor Nocturne `styles.css` unmodified as the **token** source of truth and feed it to Tailwind v4 via `@theme inline` with `var()` indirection. Its nine component classes go unused. Components come from shadcn on Base UI, copied into the repo and styled with those tokens. Arbitrary Tailwind values (`p-[13px]`) are lint-forbidden. *(AD-22, AD-36)*
 - **UX-DR3** — Theme system in CSS: raw values on `:root` and `.dark`, mapped through **`@theme inline` with `var()` indirection**. Never literals inside `@theme inline` — Tailwind folds them to constants and theming dies with a green build. Dark mode is the `.dark` class per shadcn's `@custom-variant`. `color-scheme` set to match. A blocking inline script resolves the stored preference from `localStorage` key `aira-theme` before first paint. Do not port the artboard's JS variable injection.
 - **UX-DR4** — Build five shared components: `Skeleton`, `EmptyBlock`, `ErrorBlock`, `FreshnessStamp`, `OnboardingChecklist`. Every region then needs only a state discriminator.
 - **UX-DR5** — Skeleton timing: nothing before 200ms, 400ms minimum once shown, "taking longer" line past 10s, region error past 30s. Fill `--ui-track`, opacity pulse only, never the accent, disabled under `prefers-reduced-motion`.
@@ -398,7 +398,7 @@ So that I have a tenant of my own without anyone from Aira touching the account.
 
 **Given** signup completes
 **When** the user lands in the application
-**Then** all user-facing copy is Indonesian.
+**Then** all user-facing copy is English, apart from Indonesian regulatory terms.
 
 ### Story 1.6: Membership, roles, and tenant context in the token
 

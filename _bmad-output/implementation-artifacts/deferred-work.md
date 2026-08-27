@@ -65,3 +65,55 @@ Findings surfaced by review that are real but not caused by, or not in scope for
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-2-design-system-foundation.md`
   summary: The design system is documented nowhere a contributor is pointed at.
   evidence: CLAUDE.md's "Where things are" map lists only `docs/01`–`docs/07`, none of which were touched. The `@theme inline` trap, the `accent`→`brand` rename, the forbidden ramp steps and the arbitrary-value rule live only in CSS comments and in `_bmad-output/specs/.../design-system.md`, which CLAUDE.md never mentions. The same gap applies to the `AD-*` identifiers cited throughout the code.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The application shell itself — sidebar, header, five responsive bands, off-canvas drawer, theme toggle and the app-level wrapper layer — was split out of the DOM-test-harness spec and remains Story 1.3 in sprint tracking.
+  evidence: The combined spec measured ~2,700 tokens against a 1,600 target, and the harness is independently shippable: it can be reviewed, tested and merged on its own, and the shell's acceptance criteria (44px touch targets, focus trap, tooltip on focus) cannot be verified until it exists. Its draft spec is on disk and narrowed to the shell alone.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: `REQUIRED_SUITES` proves a test file exists but never that it contains tests, so a suite emptied in place stays green.
+  evidence: The guard is an `existsSync` loop. Replacing any required suite with an empty file satisfies it completely. This is the Story 1.1 pattern inherited unchanged, not a regression introduced here, but it caps what every mutation guard built on top of it can promise.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: Vitest 4 treats an unmatched `--project` filter as a silent no-op — `vitest run --project doesnotexist` exits 0 with a green report.
+  evidence: Verified by a reviewer against the live tree. It means the `--project chromium` flag in the `test` script self-checks nothing; the entire guarantee that the browser project runs rests on `tests/harness-registration.test.ts` executing inside `unit`. That works today, but the margin is thinner than the config comments imply, and the same hazard applies to every future project filter in this repo.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: `optimizeDeps.include` is a hand-maintained list whose drift is only observable on a cold Vite cache.
+  evidence: The list exists because a cold cache made Vite re-optimise mid-test and fail with `Failed to fetch dynamically imported module`. Nothing detects a newly tested component pulling in an unlisted dependency, and a warm local run cannot surface it — the failure returns as an intermittent CI import error. The shell story adds several components and is the first place this will bite.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: `@testing-library/user-event` is installed but imported nowhere.
+  evidence: The spec's task named six dependencies; the focus-trap test correctly uses `userEvent` from `vitest/browser` instead, because that one drives real Playwright key input rather than dispatching synthetic events. The package is dead weight until the shell tests need it, which they may not.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: `next/link` in the browser test project resolves to the Pages Router implementation, so the module under test is not the one the build ships.
+  evidence: Vite does not apply Next's app-dir alias, which is why the suite needs `tests/browser/next-env-shim.ts` and a capture-phase `preventDefault` to stop the iframe navigating. Component behaviour is asserted correctly, but every navigation assertion runs against a different module than production. The shim's must-be-first-import ordering is also enforced only by a comment rather than a `setupFiles` entry.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The `--color-popover` exemption in the undeclared-variable sweep is keyed on the variable name, not on whether the component that draws it is rendered.
+  evidence: Its stated justification is that `DrawerContent` is never rendered — true today, and nothing asserts it stays true. The name is an `@theme inline` key, so it emits no custom property; the moment a later story renders `DrawerContent`, its bleed layer resolves to nothing while the sweep stays green. The sweep is the repo's stated last line of defence against the stylesheet dropping a name a component still reads.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: `prefers-reduced-motion` is honoured only by the drawer; the nav item's `transition-colors` and the tooltip's enter animation are unguarded.
+  evidence: The story's matrix names only the drawer slide, so this is outside its scope rather than a miss — but the repo now has one guarded animation and two unguarded ones, and the reduced-motion test measures only the drawer panel and overlay, so the gap is invisible to it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The drawer offers no close button — only backdrop, `Esc`, and following a link.
+  evidence: Those three exits are exactly what `screen-dashboard-interaction.md` specifies, so the implementation is faithful to the contract. But the contract itself omits the affordance a touch user reaches for first, and this drawer is the mobile navigation for field staff on personal phones. A design decision to revisit, not an implementation defect.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: `company.membershipCount` is carried by the fixture and read by nothing.
+  evidence: `CompanySwitcher` hardcodes the one-membership form rather than branching on it, so a `membershipCount: 2` fixture would silently render the wrong thing. The multi-company panel belongs to Story 1.6; the branch and its test belong there with it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The header date never rolls over at midnight on a long-lived tab.
+  evidence: `useSyncExternalStore` is subscribed to a never-firing store, deliberately, so the value is a mount-time snapshot. In a product whose day boundary drives attendance and payroll periods, a tab left open overnight shows yesterday's date with no correction.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
+  summary: The product's screen inventory now exists only in `components/shell/navigation.ts`.
+  evidence: Ten destinations and a four-group information architecture were introduced without a line in `docs/05-modules.md` or anywhere else CLAUDE.md points a contributor. Two icon libraries also now ship — `lucide-react` survives, reachable from `components/ui/dialog.tsx` alone — with nothing recording whether it is being retired.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: The Playwright cache key is invalidated by any dependency change, not only a Playwright upgrade, and has no `restore-keys`.
+  evidence: Observed on CI run 33045453865 — `Cache not found` because Story 1.3 added `@phosphor-icons/react`, changing the `package-lock.json` hash and forcing a fresh 114.7 MiB browser download. A reviewer raised this during the harness round and I rejected it on the grounds that the lockfile contains Playwright's version, which is true but incomplete: the key is correct yet far more sensitive than it needs to be. Keying on the resolved Playwright version, or adding `restore-keys`, would keep the browser across unrelated dependency bumps. Cost is ~20s per lockfile change, so this is cheap to leave and cheap to fix.

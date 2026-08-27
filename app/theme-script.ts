@@ -46,3 +46,58 @@ export const THEME_SCRIPT = `(function(){try{var s=localStorage.getItem(${JSON.s
 )});var d=s!=="light";var e=document.documentElement;e.classList.toggle(${JSON.stringify(
   DARK_CLASS,
 )},d);e.style.colorScheme=d?"dark":"light";}catch(_){}})();`;
+
+/**
+ * Read the theme the document is *currently* wearing.
+ *
+ * Module-private: `toggleTheme` is the only caller, and an exported reader
+ * nothing reads is a claim about an API that does not exist.
+ *
+ * The class on `<html>` is the truth, not React state: the blocking script
+ * above sets it before hydration, so any component that kept its own copy
+ * would start out disagreeing with the page on every load that resolved to
+ * light. Reading the DOM has no such window.
+ */
+function currentTheme(): Theme {
+  return document.documentElement.classList.contains(DARK_CLASS)
+    ? "dark"
+    : "light";
+}
+
+/**
+ * The writer — the half Story 1.2 left missing.
+ *
+ * `resolveTheme` and `THEME_SCRIPT` could already read a preference, but
+ * nothing in the repo could write one, so light was unreachable and half the
+ * theme CSS guarded a state no user could enter. This closes that.
+ *
+ * Three effects, deliberately in this order and deliberately not conditional
+ * on each other:
+ *
+ *   1. the class, which is what `@custom-variant dark (&:is(.dark *))` reads;
+ *   2. `color-scheme`, so form controls, scrollbars and the canvas the browser
+ *      paints behind the page follow the choice — the class alone does not
+ *      move them;
+ *   3. `localStorage`, so the next load's blocking script resolves the same
+ *      way and the choice survives a reload.
+ *
+ * The write is wrapped and the throw swallowed. A denied `localStorage` costs
+ * persistence, which is a degraded session; letting it propagate would abort
+ * the click handler *after* the class flip, which is a broken one.
+ */
+export function applyTheme(theme: Theme): Theme {
+  const element = document.documentElement;
+  element.classList.toggle(DARK_CLASS, theme === "dark");
+  element.style.colorScheme = theme;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Storage denied. The page still wears the theme for this session.
+  }
+  return theme;
+}
+
+/** Flip to the other theme and persist it. Returns the theme now in effect. */
+export function toggleTheme(): Theme {
+  return applyTheme(currentTheme() === "dark" ? "light" : "dark");
+}

@@ -4,7 +4,7 @@ Context file for Claude Code. Read this before touching anything.
 
 Docs are written in English because they sit next to code. Indonesian regulatory
 terms (PPh21, BPJS, PKWT, THR, lembur) are kept in Indonesian on purpose — they
-are legal terms, not translatable jargon. User-facing UI copy is Indonesian.
+are legal terms, not translatable jargon. User-facing UI copy is English.
 
 ---
 
@@ -66,7 +66,7 @@ A change is not done until all of these hold:
 - [ ] Money values are integers; no floats anywhere near a payroll path
 - [ ] New config that affects payroll is dated, not mutable
 - [ ] Migration is forward-only and reversible in principle
-- [ ] User-facing strings are Indonesian
+- [ ] User-facing strings are English (Indonesian regulatory terms excepted)
 
 ## When unsure
 
