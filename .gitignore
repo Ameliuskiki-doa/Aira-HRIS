@@ -55,3 +55,6 @@ next-env.d.ts
 # vitest browser mode (@vitest/browser) run artifacts
 __screenshots__/
 .vitest-dump/
+
+# supabase cli scratch (version-check cache written by `supabase migration up`)
+supabase/.temp/

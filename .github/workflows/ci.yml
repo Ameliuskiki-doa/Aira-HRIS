@@ -53,3 +53,64 @@ jobs:
 
       # Catches what the other three cannot — malformed CSS among them.
       - run: npm run build
+
+  # The tenant isolation gate. Separate job, because it needs a database and
+  # the job above needs a browser, and neither should wait for the other's
+  # setup. Blocking on both `push` and `pull_request` — a table that reaches
+  # `main` without a policy is the one failure this product does not survive.
+  isolation:
+    name: tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # A bare Postgres, not `supabase start`. Measured: 31s cold against 541s,
+      # 161 MB against ~8.5 GB across twelve containers, and every acceptance
+      # criterion here is a catalog or SQL fact that bare Postgres proves.
+      # The trade — bare Postgres grants more than Supabase does, so a
+      # migration green here can still fail to apply to the real project — is
+      # recorded in _bmad-output/implementation-artifacts/deferred-work.md.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # `?sslmode=disable` is not optional: Supabase CLI 2.116 negotiates TLS
+      # by default and fails against a stock Postgres container before it
+      # applies anything.
+      ISOLATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.x
+          cache: npm
+
+      # Brings in the pinned Supabase CLI. Pinned so the version that applies
+      # migrations here is the version that applies them on a developer's
+      # machine and, later, to the real project.
+      - run: npm ci
+
+      # Same command a developer runs. With ISOLATION_DATABASE_URL set it
+      # starts no container and only waits for the service above to answer, so
+      # a slow database reads as a wait rather than as a migration failure.
+      - run: npm run db:isolation:up
+
+      # Drops the schema, applies every migration with the Supabase CLI, seeds
+      # two tenants, then sweeps the catalog and asserts what a request can
+      # actually see. `--project isolation` is spelled out rather than going
+      # through `npm run test:isolation`, whose `db:isolation:up` prefix has
+      # already run above.
+      - run: npx vitest run --project isolation

@@ -75,9 +75,12 @@ type Step = {
 };
 
 const workflow = parseYaml(read(".github/workflows/ci.yml")) as {
-  jobs: Record<string, { steps: Step[] }>;
+  jobs: Record<string, { steps?: Step[] }>;
 };
-const steps: Step[] = Object.values(workflow.jobs).flatMap((job) => job.steps);
+// `steps` is optional in the workflow schema — a reusable-workflow job
+// (`uses:` at job level) has none, and `flatMap` over it used to throw here
+// rather than report anything. Defensive only; no assertion depends on it.
+const steps: Step[] = Object.values(workflow.jobs).flatMap((job) => job.steps ?? []);
 
 /** Every shell line the workflow actually executes, `run: |` blocks included. */
 const runLines = steps

@@ -2,8 +2,9 @@
 title: 'Story 1.4 — Tenant isolation harness'
 type: 'feature'
 created: '2026-08-27'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: '610ebece39c0c53513c2a36ac17a763f56b16956'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
   - '{project-root}/_bmad-output/specs/spec-aira-hris-payroll/data-model.md'
@@ -59,12 +60,12 @@ Measured on 2026-08-27 in a scratch container. Every number was run.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `package.json` -- add the Supabase CLI as a pinned devDependency so the local and CI versions cannot differ
-- [ ] `supabase/migrations/` -- the first migration: `public.tenant_id()` as a `stable` function reading `app_metadata` from `request.jwt.claims`; `organizations` and `companies`; RLS enabled, forced, policy and index in the same file. Portable to both substrates — guard role creation with `do $$ … $$`
-- [ ] test substrate -- a documented way to bring up `postgres:17`, apply migrations with `supabase migration up --db-url`, and tear down; usable identically by a developer and by CI
-- [ ] `tests/isolation/` -- the suite. **It must fail if any single one of these is removed:** RLS `enable`, RLS `force`, a policy, the `(select …)` wrapping, a `tenant_id`-leading index, the non-empty fixture assertion, an exemption's justification, or the suite's own registration. That property, not a list of cases, is the requirement. Prove the fixture is non-empty **before** asserting purity, because RLS-with-no-policy is otherwise indistinguishable from an empty result
-- [ ] `.github/workflows/ci.yml` -- a `services: postgres` container and a step that runs the isolation project. Without this the story's central criterion is unmet
-- [ ] `_bmad-output/implementation-artifacts/deferred-work.md` -- record that the gate cannot see Supabase-specific permission failures, since bare Postgres is the more permissive substrate
+- [x] `package.json` -- add the Supabase CLI as a pinned devDependency so the local and CI versions cannot differ
+- [x] `supabase/migrations/` -- the first migration: `public.tenant_id()` as a `stable` function reading `app_metadata` from `request.jwt.claims`; `organizations` and `companies`; RLS enabled, forced, policy and index in the same file. Portable to both substrates — guard role creation with `do $$ … $$`
+- [x] test substrate -- a documented way to bring up `postgres:17`, apply migrations with `supabase migration up --db-url`, and tear down; usable identically by a developer and by CI
+- [x] `tests/isolation/` -- the suite. **It must fail if any single one of these is removed:** RLS `enable`, RLS `force`, a policy, the `(select …)` wrapping, a `tenant_id`-leading index, the non-empty fixture assertion, an exemption's justification, or the suite's own registration. That property, not a list of cases, is the requirement. Prove the fixture is non-empty **before** asserting purity, because RLS-with-no-policy is otherwise indistinguishable from an empty result
+- [x] `.github/workflows/ci.yml` -- a `services: postgres` container and a step that runs the isolation project. Without this the story's central criterion is unmet
+- [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- record that the gate cannot see Supabase-specific permission failures, since bare Postgres is the more permissive substrate
 
 **Acceptance Criteria:**
 - Given a table added to `public` with no policy, when CI runs, then the build fails — verified by actually adding one, watching it fail, and removing it.
@@ -72,6 +73,15 @@ Measured on 2026-08-27 in a scratch container. Every number was run.
 - Given an empty table with RLS missing, when the suite runs, then it is still reported — a vacuous pass is a failure of the gate.
 - Given `organizations` and `companies`, when the sweep runs, then they are exempt from the `tenant_id` column rule and still required to carry RLS, force, and a policy.
 - Given the four existing gates, when they run, then lint, typecheck, the unit and browser projects, and build all still exit zero.
+
+## Spec Change Log
+
+**2026-08-27 — patch round, no loopback.**
+*Trigger:* three reviewers, one a dedicated adversarial security pass with read access to the live container. Three cross-tenant leaks were **reproduced**, not argued: a plain view over a protected table returned both tenants' salary rows (`security_invoker` defaults to false, so RLS is evaluated as the view owner); a `security definer` function did the same; and a policy granted `to anon using (true)` left every assertion green while `anon` read both tenants. Separately, no authenticated path could create the first company.
+*Root cause:* **the test task in this spec was an enumeration.** It read "the suite must fail if any single one of these is *removed*" and listed eight protections. A list of removals cannot cover the *addition* of a new leak surface — a view, a matview, a security-definer function, a second policy. Stories 1.1 and 1.2 recorded the same mistake in different shapes; this is the third.
+*Why no revert:* the migration's security surface was independently confirmed sound — no claim-forgery path across twenty malformed-claim cases, `search_path=''` set, `prosecdef=f`, no BYPASSRLS role, narrow grants. Four mutations were re-run by the caller and were red. The gaps were coverage plus two policy lines, and both fix additively.
+*Amended:* the test task now states the property — **no surface in `public` may return a row belonging to another tenant, by any means** — and names relation kinds and policy roles as things discovery must reach, rather than listing protections that must not be removed.
+*KEEP:* discovery from the catalog rather than a list, which is what made the rogue-table message read "exists in the catalog but has no entry in FIXTURES". The non-empty fixture assertion running *before* purity, which is the only thing separating RLS-with-no-policy from an empty result. The positive rule that every permissive policy must name a claim function — the implementer replaced a `qual = 'true'` denylist with it, and it catches `1 = 1`, which the denylist would have missed.
 
 ## Design Notes
 
