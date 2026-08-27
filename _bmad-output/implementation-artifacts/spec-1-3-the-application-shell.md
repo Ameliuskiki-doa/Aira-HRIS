@@ -2,7 +2,7 @@
 title: 'Story 1.3 — The application shell'
 type: 'feature'
 created: '2026-08-27'
-status: 'draft'
+status: 'ready-for-dev'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
@@ -48,7 +48,9 @@ context:
 
 Probed empirically 2026-08-27 in a scratch mirror of this repo's exact versions; every number below was measured, not read.
 
-- **Harness.** The `dom` Vitest project (headless chromium), Testing Library and the CI step already exist — see `spec-dom-test-harness.md`. Write `tests/dom/*.test.tsx`; do not touch the config beyond registering this suite.
+- **Harness — already built, committed at `2658ce5`.** The Vitest project is named **`chromium`** (headless Playwright) and collects **`tests/browser/**/*.test.tsx`** — note the directory, not `tests/dom`. Testing Library, the CI cache/install steps and `optimizeDeps.include` are in place; 237 tests pass. Write `tests/browser/shell.test.tsx` and register it in `REQUIRED_SUITES`; change nothing else in `vitest.config.mts` — the `unit` and `isolation` definitions are Ask First.
+- **`optimizeDeps.include` is hand-maintained.** It lists the browser project's dependencies so a cold Vite cache does not re-optimise mid-test and fail with `Failed to fetch dynamically imported module`. This story adds components, so **extend that list** with anything new the shell suite pulls in. The failure only reproduces on a cold cache — verify with `rm -rf node_modules/.vite`.
+- **Nothing in this repo branches on `prefers-reduced-motion`** — not `app/globals.css`, not `styles/nocturne.css`, not `tw-animate-css`. The matrix row is therefore new work, not a check of existing behaviour. The browser project already pins `reducedMotion: "reduce"` in its context, so the media query is assertable.
 - **Geometry — settled.** The shell's specified values {5,7,8,10,11,14,16,20,24,28,40}px are reachable from Tailwind's default scale **15/15 exactly**; from Nocturne's `--space-*` (2.8×N) **0/15**. Quarter-steps like `p-1.75` compile as real utilities and are lint-clean.
 - **Icons.** `@phosphor-icons/react@2.1.10`, zero peer warnings, all 19 needed icons present (kebab → PascalCase). The default entry **fails `next build` in a Server Component** (`createContext is not a function`); `@phosphor-icons/react/ssr` builds and prerenders inline `<svg>` at **0 bytes** of client JS, ~758 B gzip each inside a client component. The barrel tree-shakes; deep imports buy nothing.
 - **shadcn on Base UI, verified `add`-able:** `tooltip`, `drawer` (native, no `vaul`), `separator`, `avatar`. `menu` 404s — use `dropdown-menu` if ever needed. `drawer` hardcodes `bg-black/10`, near-invisible over `--color-bg #161826` — the reason the wrapper layer exists.
@@ -68,7 +70,7 @@ Probed empirically 2026-08-27 in a scratch mirror of this repo's exact versions;
 - [ ] `components/shell/` -- sidebar, header, nav item, theme toggle, company switcher (one-membership form only), drawer. Icons via `/ssr`; keep client boundaries as small as the interactivity requires
 - [ ] `app/(app)/layout.tsx` + placeholder segments -- the shell as a route-group layout, plus a stub route per nav destination so navigation and active state are real rather than mocked
 - [ ] `app/globals.css` -- correct the stale `--space-*` comment to record the closed verdict
-- [ ] `tests/dom/shell.test.tsx` -- **the suite must fail if any single one of these is removed:** a nav item from the definition, the `aria-current` binding, any `aria-label` on an icon-only control, the focus trap, the `Esc` handler, the backdrop handler, the close-on-navigation handler, the focus-return, any responsive band's rule, the theme writer, or the suite's own registration. That property, not a list of cases, is the requirement. **Assert on measured layout** — `getBoundingClientRect()` and resolved `getComputedStyle` in the real browser — never on class strings, which would re-create the enumeration trap that cost Stories 1.1 and 1.2
+- [ ] `tests/browser/shell.test.tsx` -- **the suite must fail if any single one of these is removed:** a nav item from the definition, the `aria-current` binding, any `aria-label` on an icon-only control, the focus trap, the `Esc` handler, the backdrop handler, the close-on-navigation handler, the focus-return, any responsive band's rule, the theme writer, or the suite's own registration. That property, not a list of cases, is the requirement. **Assert on measured layout** — `getBoundingClientRect()` and resolved `getComputedStyle` in the real browser — never on class strings, which would re-create the enumeration trap that cost Stories 1.1 and 1.2
 
 **Acceptance Criteria:**
 - Given a stored light preference, when the toggle is pressed and the page reloaded, then light survives, and a second press returns to dark — proving the writer, not only the resolver.
