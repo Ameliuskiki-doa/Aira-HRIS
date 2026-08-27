@@ -59,6 +59,14 @@ An HR manager signs up by email, registers their company, and imports ~200 emplo
 
 **Visual signatures.** The accent is a line and a glow, never a flood — the primary button is an accent outline, not a fill. Rules fade to transparent over 48px at each end. Elevation is a hairline edge plus ambient darkness; never stack heavy shadows. Icons are Phosphor regular, taken as a local dependency, not a runtime CDN load.
 
+## Live Supabase Project
+
+Provisioned and linked 2026-08-27. `PostgreSQL 17.6`, matching the `postgres:17` CI gate, and above the **PG16** floor the claim functions need for the `IS JSON` predicate. Credentials live in `.env.local` (gitignored); `.env.example` carries the shape. Never a `service_role` key, in any env file — there is no code path permitted to use one.
+
+The Story 1.4 migration is **applied there**, verified: RLS enabled and forced on `organizations` and `companies`, both claim functions `parallel safe` with `search_path=""` and `prosecdef=false`, and all six malformed-claim states failing closed.
+
+**One open item lands on Story 1.7.** `ltree` is installed in `public` and Supabase's linter raises `extension_in_public`. Moving it to the `extensions` schema is not one line: `postgres` has `search_path = "$user", public, extensions`, but `authenticated` and `anon` have no `search_path` setting and fall back to `"$user", public` — so the ltree operators this epic puts on every approval-routing request would stop resolving for exactly the roles that serve requests. Story 1.7 is the first place a real ltree query exists to test a fix against. Until then the warning is intentional.
+
 ## Cross-Story Dependencies
 
 - 1.1 gates everything: scaffold, purity lint rule, and CI must exist first.
