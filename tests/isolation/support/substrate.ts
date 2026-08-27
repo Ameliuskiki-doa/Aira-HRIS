@@ -1,0 +1,218 @@
+/**
+ * Connections to the isolation substrate, and the ways a request reaches it.
+ *
+ * Two roles, and the difference between them is the whole point:
+ *
+ *   - the **admin** connection is the migration runner and the fixture writer.
+ *     It is a superuser, which means RLS does not apply to it *even with FORCE*
+ *     -- verified, not assumed. Nothing that asserts isolation may use it.
+ *   - the **app** connection logs in as `authenticator`, a non-superuser with
+ *     no privileges of its own, and each request switches into `authenticated`
+ *     or `anon` for the duration of one transaction. That is the shape a
+ *     PostgREST request actually has, and it is the only shape an isolation
+ *     assertion is allowed to take.
+ *
+ * There is deliberately no third connection. No `service_role`, no bypass
+ * role, nothing that can see across tenants -- CLAUDE.md rule 5, and the
+ * reason a "just check the fixture really is there" shortcut is not available.
+ */
+import { Client } from "pg";
+
+import { adminUrl } from "../../../scripts/isolation-db.mjs";
+
+export const ADMIN_URL: string = adminUrl();
+
+/**
+ * The login role the isolation assertions use. Created by the test bootstrap,
+ * never by a migration: a login role with a known password belongs to the test
+ * substrate, not to a production schema.
+ */
+export const APP_ROLE = "authenticator";
+export const APP_PASSWORD = "authenticator";
+
+export const APP_URL: string = (() => {
+  const url = new URL(ADMIN_URL);
+  url.username = APP_ROLE;
+  url.password = APP_PASSWORD;
+  return url.toString();
+})();
+
+/** The claim set a request carries. Mirrors the Custom Access Token Hook. */
+export type Principal = {
+  /** auth.users.id -- the JWT `sub`. */
+  userId: string;
+  /** companies.id, from `app_metadata`. Null for a signup with no tenant yet. */
+  tenantId: string | null;
+};
+
+/** The two roles a PostgREST request can become. */
+export type RequestRole = "authenticated" | "anon";
+
+/**
+ * How `request.jwt.claims` is set for one transaction.
+ *
+ * `unset` and `raw: ""` are **different states and both are reachable**.
+ * PostgREST clears `request.*` GUCs to the empty string on a pooled
+ * connection rather than unsetting them, so `raw: ""` is the likely anonymous
+ * path -- and it raised `22P02` until the claim functions were fixed. An
+ * earlier version of this file offered only `unset`, the one variant that
+ * happened to behave.
+ */
+export type ClaimSource =
+  | { kind: "principal"; principal: Principal }
+  | { kind: "raw"; value: string }
+  | { kind: "unset" };
+
+export const claimsJson = (principal: Principal) =>
+  JSON.stringify({
+    sub: principal.userId,
+    role: "authenticated",
+    app_metadata: principal.tenantId === null ? {} : { tenant_id: principal.tenantId },
+  });
+
+async function connect(url: string): Promise<Client> {
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  return client;
+}
+
+/** Runs `fn` as the superuser. Migrations and fixtures only. */
+export async function withAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+  const client = await connect(ADMIN_URL);
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Runs `fn` inside one transaction as `role`, carrying `claims`.
+ *
+ * Both settings are `set local`, so they die with the transaction and cannot
+ * leak into the next caller.
+ */
+export async function asRequest<T>(
+  options: { role?: RequestRole; claims: ClaimSource; rollback?: boolean },
+  fn: (client: Client) => Promise<T>,
+): Promise<T> {
+  const role: RequestRole = options.role ?? "authenticated";
+  const client = await connect(APP_URL);
+  try {
+    await client.query("begin");
+    await client.query(`set local role ${role}`);
+    if (options.claims.kind === "principal") {
+      await client.query("select set_config('request.jwt.claims', $1, true)", [
+        claimsJson(options.claims.principal),
+      ]);
+    } else if (options.claims.kind === "raw") {
+      await client.query("select set_config('request.jwt.claims', $1, true)", [
+        options.claims.value,
+      ]);
+    }
+    const result = await fn(client);
+    // `rollback: true` is how a test proves a *successful* write is permitted
+    // without leaving the row behind for the next suite to trip over.
+    await client.query(options.rollback ? "rollback" : "commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+/** The common case: one authenticated principal, or no claim at all. */
+export const asPrincipal = <T>(
+  principal: Principal | null,
+  fn: (client: Client) => Promise<T>,
+): Promise<T> =>
+  asRequest(
+    { role: "authenticated", claims: principal ? { kind: "principal", principal } : { kind: "unset" } },
+    fn,
+  );
+
+/** An unauthenticated request. `anon` must never see a row, by any route. */
+export const asAnon = <T>(fn: (client: Client) => Promise<T>): Promise<T> =>
+  asRequest({ role: "anon", claims: { kind: "unset" } }, fn);
+
+export type PrivilegeIdentity = {
+  identity: string;
+  name: string;
+  rolsuper: boolean;
+  rolbypassrls: boolean;
+};
+
+/**
+ * The privileges the app connection actually holds.
+ *
+ * Returned rather than asserted, so the assertion can live in a test file
+ * where deleting it is visible, instead of being a single line in globalSetup
+ * whose removal would make every purity assertion vacuous in silence.
+ * `globalSetup` calls it too, to fail fast with a clear message.
+ *
+ * Both identities matter. `session_user` is the login role the connection was
+ * opened as; `current_user` is the role the request switched into. Either one
+ * carrying superuser or BYPASSRLS makes the whole suite meaningless, and only
+ * `pg_roles` sees both -- `pg_user` filters to roles that can log in, so the
+ * switched-into role is simply absent from it.
+ */
+export async function appRolePrivileges(): Promise<PrivilegeIdentity[]> {
+  return asPrincipal(null, async (client) => {
+    const { rows } = await client.query<PrivilegeIdentity>(
+      `select 'session_user' as identity, r.rolname as name, r.rolsuper, r.rolbypassrls
+         from pg_roles r where r.rolname = session_user
+       union all
+       select 'current_user', r.rolname, r.rolsuper, r.rolbypassrls
+         from pg_roles r where r.rolname = current_user`,
+    );
+    return rows;
+  });
+}
+
+export async function assertAppRoleCannotBypassRls(): Promise<void> {
+  const identities = await appRolePrivileges();
+  if (identities.length < 2) {
+    throw new Error(
+      `Expected both session_user and current_user to resolve in pg_roles; got ${JSON.stringify(identities)}.`,
+    );
+  }
+  for (const identity of identities) {
+    if (identity.rolsuper || identity.rolbypassrls) {
+      throw new Error(
+        `The isolation suite's ${identity.identity} (${identity.name}) can bypass RLS ` +
+          `(rolsuper=${String(identity.rolsuper)}, rolbypassrls=${String(identity.rolbypassrls)}). ` +
+          `Every isolation assertion would pass vacuously.`,
+      );
+    }
+  }
+}
+
+/** Postgres error codes the suite distinguishes. */
+export const PG_INSUFFICIENT_PRIVILEGE = "42501";
+
+/**
+ * Reads a relation as `role`, treating "permission denied" as "no rows".
+ *
+ * A relation a role cannot select at all is as safe as one whose policy
+ * filters it to nothing, and the two are different mechanisms -- so the
+ * assertion has to accept either without accepting a row.
+ */
+export async function readOrDenied(
+  relation: string,
+  options: { role?: RequestRole; claims: ClaimSource },
+): Promise<{ denied: boolean; rows: Array<Record<string, unknown>> }> {
+  try {
+    const rows = await asRequest(options, async (client) => {
+      const result = await client.query(`select * from ${relation}`);
+      return result.rows as Array<Record<string, unknown>>;
+    });
+    return { denied: false, rows };
+  } catch (error) {
+    if ((error as { code?: string }).code === PG_INSUFFICIENT_PRIVILEGE) {
+      return { denied: true, rows: [] };
+    }
+    throw error;
+  }
+}

@@ -58,7 +58,7 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 
 | Inherited | Binds here |
 |---|---|
-| `tenant_id` on every table except global `stat_*`; RLS enabled **and** forced; policies wrap claims as `(select auth.tenant_id())`; every index leads with `tenant_id` | AD-5, AD-16, AD-18 |
+| `tenant_id` on every table except global `stat_*`, the pg-boss schema, and the two tables at or above the tenant boundary; RLS enabled **and** forced; policies wrap claims as `(select public.tenant_id())`; every table carries at least one valid, non-partial index leading with the column its policy is keyed on | AD-5, AD-16, AD-18 |
 | `tenant_id` = `company_id` = one legal entity; lives in `app_metadata`, never `user_metadata` | AD-8, AD-10 |
 | Workers never use `service_role`; no cross-tenant bypass role | AD-6, AD-16 |
 | Money is integer rupiah, rounded per component at write | AD-13, AD-14 |
@@ -115,7 +115,7 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 - **Rule:** 15-minute access token TTL. No `memberships` subquery is added to the hot path to compensate.
 
 ### AD-10 — `tenant_id` enters the JWT through a Custom Access Token Hook
-- **Binds:** CAP-2, `auth.tenant_id()`
+- **Binds:** CAP-2, `public.tenant_id()`
 - **Prevents:** `tenant_id` being set anywhere user-writable, and a revoked membership surviving a refresh
 - **Rule:** A Postgres-function hook reads the user's active company, re-validates the membership is active, and injects `app_metadata.tenant_id`. Switching company updates the active company then forces a token refresh. Failure to resolve emits no `tenant_id`.
 
@@ -221,7 +221,7 @@ Settled in `SPEC-aira-hris-payroll` and binding here. Not re-derived, not reopen
 
 ### AD-31 — RLS is role-aware
 - **Binds:** every tenant table
-- **Prevents:** the hole this design surfaces — `using (tenant_id = (select auth.tenant_id()))` is right for HR, but once employees hold real sessions it lets every employee read every colleague's salary, NIK and payslips. Tenant isolation intact; **in-tenant isolation absent**
+- **Prevents:** the hole this design surfaces — `using (tenant_id = (select public.tenant_id()))` is right for HR, but once employees hold real sessions it lets every employee read every colleague's salary, NIK and payslips. Tenant isolation intact; **in-tenant isolation absent**
 - **Rule:** Policies branch on the role in the claim, per AD-33's table — **`hr_staff` does not see salary**, so `admin`/`hr_manager` and `hr_staff` are different tiers, not one. The AD-10 hook carries **`role` and `employee_id` in claims**, so no `memberships` or `employees` subquery reaches the hot path — preserving AD-25 and the performance reason behind the `(select ...)` pattern.
 
 ### AD-32 — Clock-in trust is a bundle, not GPS alone

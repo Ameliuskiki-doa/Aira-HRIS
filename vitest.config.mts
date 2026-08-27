@@ -13,7 +13,7 @@ const ROOT_NO_SLASH = ROOT.replace(/\/$/, "");
  * boundary suite would otherwise leave `npm test` green while nothing checks
  * that lib/domain is still pure.
  */
-const REQUIRED_SUITES = [
+export const REQUIRED_SUITES = [
   "tests/boundary.test.ts",
   "tests/theme.test.ts",
   // The DOM harness. Two files, and both have to be here. The smoke suite is
@@ -28,6 +28,19 @@ const REQUIRED_SUITES = [
   // names of the icon-only controls; losing it silently would leave the whole
   // frame unverified.
   "tests/browser/shell.test.tsx",
+  // The tenant isolation harness (Story 1.4). docs/07 calls this the most
+  // important test in the codebase, and it is the one suite `npm test` does
+  // not run -- so nothing else would notice it vanishing. Listing it here
+  // makes deleting any part of it fail every Vitest invocation, `npm test`
+  // included, not just the isolation project nobody runs locally.
+  "tests/isolation/catalog-sweep.test.ts",
+  "tests/isolation/tenant-purity.test.ts",
+  // The two halves of the harness that need no database, and therefore run in
+  // `unit` on every `npm test`: the guard that notices the isolation *project*
+  // being unregistered or dropped from CI, and the pure functions the sweep's
+  // detections are built out of.
+  "tests/isolation-registration.test.ts",
+  "tests/isolation-guards.test.ts",
 ];
 
 for (const suite of REQUIRED_SUITES) {
@@ -146,9 +159,13 @@ export default defineConfig({
         root: ROOT,
         test: {
           name: "isolation",
-          // Story 1.4 fills this in; it needs a local Supabase stack, so it
-          // stays out of the default `npm test` run.
+          // Needs a Postgres 17 to talk to, so it stays out of the default
+          // `npm test` run. `npm run db:isolation:up` brings one up locally;
+          // CI uses a `services: postgres` container. Either way the setup
+          // below drops, migrates and seeds it, so the two substrates are
+          // entered through exactly one code path.
           include: ["tests/isolation/**/*.test.ts"],
+          globalSetup: ["tests/isolation/globalSetup.ts"],
           testTimeout: 300_000,
           hookTimeout: 300_000,
         },

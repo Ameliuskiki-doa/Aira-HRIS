@@ -32,9 +32,9 @@ building it.
 These come from decisions already made. Do not revisit them without being asked.
 Violating any of them is a bug, not a style preference.
 
-1. **`tenant_id` on every table.** No exceptions, including lookup and log tables.
-2. **RLS on every table**, and `tenant_id` must be the leading column of every index.
-3. **Wrap JWT claims in `(select ...)` inside policies.** `using (tenant_id = (select auth.tenant_id()))`. Without the subquery Postgres re-evaluates per row.
+1. **`tenant_id` on every table** — lookup and log tables included. Exactly **three** exemptions exist, each carrying a written justification the isolation suite enforces: `stat_*` statutory tables (the same rows for every tenant, so there is no tenant dimension to isolate), the **pg-boss schema** (a library owns it and rewrites it on upgrade, so it is out of discovery entirely), and `organizations` / `companies` (at or above the tenant boundary — `companies.id` *is* the `tenant_id`). The last waives the column and nothing else: RLS, force, a policy and the leading index still apply. A fourth exemption is a decision, not a convenience — the list is pinned by a test in `tests/isolation/support/catalog.ts`. *(Corrected 2026-08-27: this rule previously read "No exceptions", which stopped being true the moment the first statutory table was specified.)*
+2. **RLS enabled *and* forced on every table**, and every table carries at least one valid, non-partial index whose **leading column is the column its policy is keyed on** — `tenant_id` everywhere, except `organizations` and `companies`, which sit at or above the tenant boundary and key on ownership and on `id`. That index is the access path every policy takes. *(Corrected 2026-08-27: this rule previously said `tenant_id` must lead **every** index, which no table can satisfy — an `id` primary key is an index leading with `id`.)*
+3. **Wrap JWT claims in `(select ...)` inside policies.** `using (tenant_id = (select public.tenant_id()))`. Without the subquery Postgres re-evaluates per row.
 4. **`tenant_id` lives in `app_metadata`, never `user_metadata`.** `user_metadata` is user-writable.
 5. **Workers never use `service_role`.** Use a dedicated role with `FORCE ROW LEVEL SECURITY` and set the tenant context per transaction.
 6. **Money is integer rupiah, rounded per component.** Never float, never decimal-as-string. Every component result is rounded as it is written, so gross/net are exact sums of their stored lines. See `docs/07-conventions-and-testing.md`.
@@ -61,7 +61,7 @@ docs/07-conventions-and-testing.md    code conventions, migrations, required tes
 
 A change is not done until all of these hold:
 
-- [ ] Every new table has `tenant_id`, RLS enabled, and a policy
+- [ ] Every new table clears the isolation gate: `tenant_id`, RLS enabled **and forced**, a policy that names a claim function, and an index leading with the key that policy uses (rules 1–3)
 - [ ] The tenant isolation test suite passes (see `docs/07`)
 - [ ] Money values are integers; no floats anywhere near a payroll path
 - [ ] New config that affects payroll is dated, not mutable

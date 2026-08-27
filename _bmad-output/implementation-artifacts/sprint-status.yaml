@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-21-2026 11:54
-last_updated: '08-27-2026 13:10'
+last_updated: '08-27-2026 16:05'
 project: Aira
 project_key: NOKEY
 tracking_system: file-system
@@ -39,7 +39,7 @@ development_status:
   1-1-scaffold-the-repository: review
   1-2-design-system-foundation: review
   1-3-the-application-shell: review
-  1-4-tenant-isolation-harness: backlog
+  1-4-tenant-isolation-harness: review
   1-5-sign-up-by-email-and-create-a-company: backlog
   1-6-membership-roles-and-tenant-context-in-the-token: backlog
   1-7-company-structure-branches-departments-positions: backlog

@@ -175,7 +175,7 @@ Full rationale for each lives in the companion named in brackets.
 
 - `tenant_id` **is** `company_id` — one legal entity (PT). Not a group, not a branch. NPWP, NPP BPJS, PKWT and 1721-A1 all attach to a legal entity. [stack]
 - `tenant_id` on every table including lookup and log tables. Only global `stat_*` reference tables are exempt, and they must be explicitly allowlisted in the isolation test. [data-model]
-- RLS `enable` **and** `force` on every table, and JWT claims wrapped as `(select auth.tenant_id())` — without the subquery Postgres re-evaluates the function per row, a 10–100× difference on a multi-million-row attendance table. [stack]
+- RLS `enable` **and** `force` on every table, and JWT claims wrapped as `(select public.tenant_id())` — without the subquery Postgres re-evaluates the function per row, a 10–100× difference on a multi-million-row attendance table. [stack]
 - Every index leads with `tenant_id`, otherwise it is unusable once RLS adds its predicate. [conventions]
 - `tenant_id` lives in `app_metadata`, never `user_metadata` — `user_metadata` is user-writable. [stack]
 - Workers never use `service_role`. A dedicated role with `FORCE ROW LEVEL SECURITY` sets tenant context per transaction, so a forgotten `WHERE` is caught by the database. [stack]

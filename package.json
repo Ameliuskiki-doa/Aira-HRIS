@@ -14,7 +14,9 @@
     "test": "vitest run --project unit --project chromium",
     "test:node": "vitest run --project unit",
     "test:browser": "vitest run --project chromium",
-    "test:isolation": "vitest run --project isolation"
+    "db:isolation:up": "node scripts/isolation-db.mjs up",
+    "db:isolation:down": "node scripts/isolation-db.mjs down",
+    "test:isolation": "npm run db:isolation:up && vitest run --project isolation"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -36,6 +38,7 @@
     "@testing-library/user-event": "^14.6.6",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/browser": "^4.1.11",
@@ -44,7 +47,9 @@
     "eslint-config-next": "16.3.2",
     "eslint-plugin-tailwindcss": "^4.4.0",
     "js-yaml": "^4.3.1",
+    "pg": "8.23.0",
     "playwright": "^1.62.1",
+    "supabase": "2.116.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"
