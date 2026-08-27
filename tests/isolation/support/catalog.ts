@@ -99,12 +99,67 @@ export const EXEMPTIONS: readonly Exemption[] = [
 /**
  * Functions in `public` allowed to be `security definer`.
  *
- * Empty, and a test asserts it stays empty, so the first entry is a visible,
- * deliberate change rather than a line in a migration nobody reads. Story 1.6's
- * Custom Access Token Hook is the likely first occupant.
+ * Was empty through Story 1.5, pinned so that the first entry would be a
+ * visible, deliberate change rather than a line in a migration nobody reads.
+ * Story 1.6 fills it with three, and `catalog-sweep.test.ts` pins the list to
+ * exactly those names -- a fourth is a decision, not a commit.
+ *
+ * The third was added on the owner's decision, after the story deliberately
+ * stopped short of it: nothing created the founding membership, so the hook
+ * and the switcher both worked and had no row to work on.
+ *
+ * None of the three is here because `security definer` was convenient. Each
+ * was measured against the alternative and the alternative did not work: with
+ * `force row level security` on `memberships`, an invoker-rights function
+ * reads zero rows for the hook (`supabase_auth_admin` is `rolbypassrls =
+ * false`), reads only the active tenant for the switcher, and cannot write at
+ * all for the founding membership -- because `memberships` grants
+ * `authenticated` no write, which is itself the property being defended.
+ *
+ * What keeps them safe is not the tag. It is that every statement in all three
+ * is filtered to one `user_id`, taken from the JWT and never from an argument.
+ * The tests prove exactly that, by attempting the alternative.
  */
 export type FunctionExemption = { name: string; justification: string };
-export const SECURITY_DEFINER_EXEMPTIONS: readonly FunctionExemption[] = [];
+export const SECURITY_DEFINER_EXEMPTIONS: readonly FunctionExemption[] = [
+  {
+    name: "custom_access_token_hook",
+    justification:
+      "Runs as supabase_auth_admin during token issuance, before any claim exists for a policy to " +
+      "adjudicate by, so there is no invoker context to run under. Supabase's documented alternative " +
+      "-- security invoker plus grants to supabase_auth_admin -- was measured against this schema and " +
+      "returns zero rows, because memberships has FORCE ROW LEVEL SECURITY and supabase_auth_admin is " +
+      "rolbypassrls = false on the live project. Four forms were tested and definer-owned-by-postgres " +
+      "is the only one that works. Narrowness is what makes it safe: it reads one table filtered to one " +
+      "user_id and returns claims rather than rows, and EXECUTE is revoked from public, anon and " +
+      "authenticated so the only caller is GoTrue itself.",
+  },
+  {
+    name: "switch_company",
+    justification:
+      "The company switcher has to read membership rows in companies the caller is not currently in -- " +
+      "that is what switching means -- and memberships_tenant is keyed on the ACTIVE tenant, so an " +
+      "invoker-rights read returns only the company the user already occupies. The alternatives were " +
+      "weighed: widening the policy to user_id = auth_user_id() would make memberships multi-tenant to " +
+      "a single caller and take it out from under the purity assertion, and putting the company list in " +
+      "the token would grow every claim set with the user's memberships. Every statement in the " +
+      "function is filtered on m.user_id = public.auth_user_id(), which comes from the caller's own JWT " +
+      "and cannot be passed in; no argument names a user.",
+  },
+  {
+    name: "create_founding_membership",
+    justification:
+      "The only thing in the schema that may write memberships.tenant_id or memberships.role, and it " +
+      "exists because nothing else may: `authenticated` is granted no write on that table at all, " +
+      "since a writable tenant key hands out the tenant boundary's own keys and a writable role is " +
+      "self-service escalation. register_company stays security invoker and is still adjudicated by " +
+      "organizations_owner and companies_create_under_owned_org; only this one insert is privileged. " +
+      "It touches exactly one row: an admin membership for the JWT subject in a company the JWT " +
+      "subject owns. It takes no user argument, so it cannot be aimed at anyone else, and because " +
+      "security definer skips the policy that would have checked ownership, the check against " +
+      "organizations.owner_user_id is made explicitly in the body. Idempotent, so a retry resumes.",
+  },
+];
 
 /**
  * Schemas the migration runner writes for its own bookkeeping.

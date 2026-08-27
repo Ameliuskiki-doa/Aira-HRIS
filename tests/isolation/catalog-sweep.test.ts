@@ -304,11 +304,32 @@ describe("functions in public", () => {
     ).toEqual([]);
   });
 
-  it("has no security definer exemptions yet", () => {
-    // Pinned empty so the first entry is a visible change rather than a line
-    // in a migration nobody reads. Story 1.6's access-token hook is the likely
-    // first occupant.
-    expect(SECURITY_DEFINER_EXEMPTIONS).toEqual([]);
+  it("holds exactly the three agreed security definer exemptions", () => {
+    // Pinned empty through Story 1.5 so the first entry would be a visible
+    // change rather than a line in a migration nobody reads. Story 1.6 fills
+    // it, and the pin MOVES rather than being deleted -- which is the list
+    // doing its job: the third entry was a decision taken by the owner after
+    // the story stopped short of taking it alone. A fourth is the same kind of
+    // decision, and this line is what makes adding one impossible to do
+    // quietly.
+    expect(SECURITY_DEFINER_EXEMPTIONS.map((entry) => entry.name)).toEqual([
+      "custom_access_token_hook",
+      "switch_company",
+      "create_founding_membership",
+    ]);
+  });
+
+  it("exempts nothing that does not exist", () => {
+    // An exemption for a function that was renamed or dropped is a hole with a
+    // justification attached: the sweep would go on honouring the name while
+    // whatever replaced it goes unexamined.
+    const present = new Set(functions.map((fn) => fn.name));
+    for (const entry of SECURITY_DEFINER_EXEMPTIONS) {
+      expect(
+        present.has(entry.name),
+        `SECURITY_DEFINER_EXEMPTIONS names public.${entry.name}(), which is not in the catalog`,
+      ).toBe(true);
+    }
   });
 
   it.each(SECURITY_DEFINER_EXEMPTIONS.map((entry) => [entry.name, entry] as const))(

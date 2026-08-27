@@ -216,3 +216,37 @@ export async function readOrDenied(
     throw error;
   }
 }
+
+/**
+ * Runs a write, treating "permission denied" as "nothing was written".
+ *
+ * The write half of `readOrDenied`, and it exists for the same reason. A
+ * relation is protected from a write by either mechanism -- a policy that
+ * admits no row, or a privilege the role was never granted -- and an assertion
+ * that only understands one of them cannot be applied to a table that uses the
+ * other. `memberships` is the first such table: `authenticated` holds SELECT
+ * and nothing else, deliberately, so every write against it is refused before
+ * a policy is ever consulted.
+ *
+ * The distinction is preserved rather than flattened, because it is a real
+ * one: `denied` is an error the caller sees and `affected: 0` is silence.
+ * Tests that care which one they got read the field.
+ */
+export async function updateOrDenied(
+  sql: string,
+  params: unknown[],
+  options: { role?: RequestRole; claims: ClaimSource; rollback?: boolean },
+): Promise<{ denied: boolean; affected: number }> {
+  try {
+    const affected = await asRequest(options, async (client) => {
+      const result = await client.query(sql, params);
+      return result.rowCount ?? 0;
+    });
+    return { denied: false, affected };
+  } catch (error) {
+    if ((error as { code?: string }).code === PG_INSUFFICIENT_PRIVILEGE) {
+      return { denied: true, affected: 0 };
+    }
+    throw error;
+  }
+}

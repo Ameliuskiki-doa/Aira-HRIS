@@ -127,9 +127,18 @@ const countCompanies = (ownerUserId: string) =>
   });
 
 afterEach(async () => {
-  // Committed rows, so they have to be removed explicitly. Companies first:
-  // the foreign key points that way.
+  // Committed rows, so they have to be removed explicitly. Memberships first,
+  // then companies, then organizations: the foreign keys point that way, and
+  // `memberships.tenant_id` references `companies (id)` with no cascade -- on
+  // purpose, because deleting a company out from under a membership is exactly
+  // the orphaning the tenant boundary must not permit. Registration now
+  // creates a founding membership, so this suite has one to clean up per
+  // registered company.
   await withAdmin(async (client) => {
+    await client.query(
+      `delete from public.memberships where user_id = any($1::uuid[])`,
+      [OWNED_BY_THIS_SUITE],
+    );
     await client.query(
       `delete from public.companies c
         using public.organizations o

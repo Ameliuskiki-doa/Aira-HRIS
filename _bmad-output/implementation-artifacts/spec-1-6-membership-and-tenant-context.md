@@ -2,8 +2,9 @@
 title: 'Story 1.6 — Membership, roles, and tenant context in the token'
 type: 'feature'
 created: '2026-08-27'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: '25c7cf5950bd853e83a2ea63163aecb904c2d753'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
   - '{project-root}/_bmad-output/specs/spec-aira-hris-payroll/data-model.md'
@@ -77,6 +78,15 @@ Measured 2026-08-27 in the container and read-only against the live project.
 - Given a user who switches company, when the next query runs, then it returns rows from the new company only and a deep link to the previous one does not resolve.
 - Given a tenant-mate's membership row, when a user attempts to write its `last_active_at`, then the attempt is refused — not silently zero rows.
 - Given all five gates, when they run, then lint, typecheck, both Node projects, the browser project, the isolation project and build all exit zero.
+
+## Spec Change Log
+
+**2026-08-27 — one gap closed by owner decision, no loopback.**
+*Trigger:* the implementation was correct and incomplete in a way the spec never named. `memberships`, the hook and switching were all built and verified, but **nothing created the founding membership** — `register_company()` stopped at the company, so a founder signed up, owned a company, and had no membership in it. The hook was right and had no rows to read; every new tenant would have seen an empty product.
+*Root cause:* this spec's matrix described what a token must carry for a user **who has a membership**, and never asked where the first one comes from. The implementer stopped and surfaced it rather than inventing a mechanism, which was the right call.
+*Decision:* the owner chose a third narrow `security definer` function over widening `register_company` or granting `memberships` an insert. That keeps two properties that were measured, not assumed: `register_company` stays `security invoker` so the organization and company inserts are still adjudicated by RLS, and `memberships` keeps **zero** write privilege for `authenticated` — `has_table_privilege` reads false for insert, update and delete.
+*Verified end to end:* the hook returned `{}` for a fresh user and `{"role":"admin","tenant_id":"…","employee_id":null}` after registration, with `tenant_id` equal to the returned `company_id`. Three attacks refused: founding a membership in a company you do not own, calling as `anon`, and writing `memberships` directly.
+*KEEP:* the hook's totality and its unconditional strip of an inbound `tenant_id`, both of which survive a forged claim. The founding call sitting **unconditionally** inside `register_company` rather than in its create-branch, which makes re-registration the repair path for accounts that predate memberships. `currentActiveCompany()` resolving by claim with an ownership fallback — the implementer rejected both options offered and was right: repointing alone blanks existing accounts, leaving it alone blanks every invited member Epic 2 creates.
 
 ## Design Notes
 

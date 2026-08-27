@@ -34,11 +34,29 @@ type OrganizationRow = {
 /**
  * The company this user owns, or null before they have registered one.
  *
- * Keyed on organization ownership because that is the only principal that
- * exists today: a freshly confirmed user holds a `sub` and no tenant claim,
+ * Keyed on organization ownership, which was the only principal that existed
+ * before Story 1.6: a freshly confirmed user holds a `sub` and no tenant claim,
  * and `companies_visible_to_org_owner` is the policy written for exactly this
- * moment. Story 1.6 replaces ownership with membership, and this function is
- * where that change lands.
+ * moment.
+ *
+ * **This is now the FALLBACK, not the primary path.** Story 1.6 resolves the
+ * active company from the tenant claim and the membership list first — see
+ * `currentActiveCompany` in `lib/auth/session.ts` — and reaches this function
+ * only when that finds nothing. Two callers still land here and only one of
+ * them is temporary:
+ *
+ *   * an account registered BEFORE the founding membership existed, which has
+ *     an organization and a company and no membership row. Re-running
+ *     `register_company()` repairs it, and when none are left this path is
+ *     dead;
+ *   * `app/(app)/company/new/page.tsx`, which asks "does this owner already
+ *     have a company" before offering the registration form — a question about
+ *     ownership, correctly, and not about membership.
+ *
+ * It was deliberately NOT repointed at `memberships`. Doing so would blank the
+ * header for every account on the live project at once, and it cannot be fixed
+ * by a backfill from here: nothing in a request path may write `tenant_id` or
+ * `role`.
  *
  * Returns the first company of the first organization. One legal entity per
  * tenant and one organization per owner is the shape signup creates; the

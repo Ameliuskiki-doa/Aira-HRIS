@@ -33,9 +33,17 @@ export function UserBlock({ user }: UserBlockProps) {
         <span data-slot="user-name" className="truncate text-xs font-medium">
           {user.name}
         </span>
-        <span data-slot="user-role" className="text-3xs text-ui-muted truncate">
-          {user.role}
-        </span>
+        {/*
+          Omitted rather than blanked when there is no role. A session with no
+          active membership genuinely has none, and an empty line under the
+          name reads as a rendering fault — while inventing a default would put
+          a permission on screen that the database does not grant.
+        */}
+        {user.role !== null && (
+          <span data-slot="user-role" className="text-3xs text-ui-muted truncate">
+            {user.role}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -40,6 +40,25 @@ export const REQUIRED_SUITES = [
   // thing that proves a retry resumes instead of creating a second one.
   // Neither property is visible to the sweep or to the purity suite.
   "tests/isolation/signup-rpc.test.ts",
+  // The access token hook (Story 1.6). The hook runs on every sign-in AND
+  // every refresh, has two seconds, and gets no retry — so a raise in it is
+  // not a bad row, it is every signed-in user evicted within the token TTL.
+  // This is the only thing that proves it is total, that it re-validates
+  // `is_active`, that it STRIPS an inbound tenant_id rather than passing it
+  // through, and that nothing but supabase_auth_admin may execute it.
+  "tests/isolation/access-token-hook.test.ts",
+  // The founding membership (Story 1.6, added on the owner's decision). The
+  // only thing that proves a fresh signup now produces a tenant a session can
+  // enter -- asserted as a BEFORE and an AFTER, so it cannot pass against a
+  // product where signup had always been complete -- and the only thing that
+  // proves the third `security definer` function cannot be aimed at a company
+  // the caller does not own, while `memberships` keeps zero write surface.
+  "tests/isolation/founding-membership.test.ts",
+  // The membership write surface and company switching (Story 1.6). The only
+  // thing that proves no request path can write `tenant_id`, write `role`, or
+  // move a colleague's `last_active_at` — each proved by attempting it, and
+  // each measured as REFUSED rather than as zero rows.
+  "tests/isolation/membership-switching.test.ts",
   // What a request may write, asked as an attacker rather than as the
   // application (Story 1.5 hardening). The only thing that proves the paid
   // tier is not self-service and that the Zod length bounds are also the
@@ -49,6 +68,12 @@ export const REQUIRED_SUITES = [
   // the session gate, the Zod gate, and the closed time-zone set. Losing it
   // would leave every route handler in the product unguarded and green.
   "tests/signup-boundary.test.ts",
+  // The company-switch boundary (Story 1.6), in `unit` because it needs no
+  // database. The only thing that proves the token is reissued as part of the
+  // switch rather than after it, that a refusal is a 403 and not a 500, and
+  // that no Postgres text reaches a caller on the one endpoint that changes
+  // which tenant a session acts in.
+  "tests/switch-company-boundary.test.ts",
   // The elevated-key prohibition (Story 1.5). CLAUDE.md rule 5 had no
   // machinery at all before this suite -- recorded in deferred-work as the
   // invariant that got none while core purity got sixty denials.
@@ -144,6 +169,8 @@ export default defineConfig({
             // inside it throws "Invalid hook call". Measured, not guessed.
             "@base-ui/react/avatar",
             "@base-ui/react/drawer",
+            // The company switcher's panel (Story 1.6).
+            "@base-ui/react/menu",
             "@base-ui/react/separator",
             "@base-ui/react/tooltip",
             // The shell's icons and its links.
@@ -204,6 +231,17 @@ export default defineConfig({
           // entered through exactly one code path.
           include: ["tests/isolation/**/*.test.ts"],
           globalSetup: ["tests/isolation/globalSetup.ts"],
+          // ONE FILE AT A TIME. Every suite in this project talks to the same
+          // database, and several of them write to it -- `write-surface`
+          // registers and deletes a company, `membership-switching` seeds and
+          // deletes membership rows. Run in parallel, those writes land inside
+          // another file's read: `tenant-purity` counts rows as the admin,
+          // then counts what a tenant can see, and an insert between the two
+          // makes `visible < total` false. Reproduced as exactly that failure
+          // on `memberships`, and the same race was latent on `companies`
+          // before it. The project takes about two seconds; there is nothing
+          // to buy by racing it.
+          fileParallelism: false,
           testTimeout: 300_000,
           hookTimeout: 300_000,
         },

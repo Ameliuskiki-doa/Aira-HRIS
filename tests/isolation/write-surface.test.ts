@@ -67,6 +67,13 @@ const planOf = (organizationId: string) =>
 
 afterEach(async () => {
   await withAdmin(async (client) => {
+    // Memberships first. Registration now creates a founding membership, and
+    // `memberships.tenant_id` references `companies (id)` with no cascade --
+    // deliberately, since deleting a company out from under a membership is
+    // the orphaning the tenant boundary exists to prevent.
+    await client.query(`delete from public.memberships where user_id = $1`, [
+      OWNER.userId,
+    ]);
     await client.query(
       `delete from public.companies c using public.organizations o
         where o.id = c.organization_id and o.owner_user_id = $1`,
