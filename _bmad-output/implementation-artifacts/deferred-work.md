@@ -113,3 +113,7 @@ Findings surfaced by review that are real but not caused by, or not in scope for
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-application-shell.md`
   summary: The product's screen inventory now exists only in `components/shell/navigation.ts`.
   evidence: Ten destinations and a four-group information architecture were introduced without a line in `docs/05-modules.md` or anywhere else CLAUDE.md points a contributor. Two icon libraries also now ship — `lucide-react` survives, reachable from `components/ui/dialog.tsx` alone — with nothing recording whether it is being retired.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dom-test-harness.md`
+  summary: The Playwright cache key is invalidated by any dependency change, not only a Playwright upgrade, and has no `restore-keys`.
+  evidence: Observed on CI run 33045453865 — `Cache not found` because Story 1.3 added `@phosphor-icons/react`, changing the `package-lock.json` hash and forcing a fresh 114.7 MiB browser download. A reviewer raised this during the harness round and I rejected it on the grounds that the lockfile contains Playwright's version, which is true but incomplete: the key is correct yet far more sensitive than it needs to be. Keying on the resolved Playwright version, or adding `restore-keys`, would keep the browser across unrelated dependency bumps. Cost is ~20s per lockfile change, so this is cheap to leave and cheap to fix.
