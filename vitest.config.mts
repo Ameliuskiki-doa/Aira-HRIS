@@ -74,6 +74,12 @@ export const REQUIRED_SUITES = [
   // that no Postgres text reaches a caller on the one endpoint that changes
   // which tenant a session acts in.
   "tests/switch-company-boundary.test.ts",
+  // The tenant-context reissue rule (Story 1.6, after an end-to-end signup on
+  // the live project found /api/companies changing the caller's membership and
+  // never reissuing the token). The only thing that covers a route added
+  // LATER: the two boundary suites assert ordering for the two routes that
+  // exist, and neither can notice a third one forgetting.
+  "tests/tenant-context-reissue.test.ts",
   // The elevated-key prohibition (Story 1.5). CLAUDE.md rule 5 had no
   // machinery at all before this suite -- recorded in deferred-work as the
   // invariant that got none while core purity got sixty denials.

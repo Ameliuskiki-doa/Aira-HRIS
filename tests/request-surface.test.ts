@@ -20,6 +20,7 @@ const supabase = vi.hoisted(() => ({
   signUp: vi.fn(),
   signInWithPassword: vi.fn(),
   exchangeCodeForSession: vi.fn(),
+  refreshSession: vi.fn(),
   rpc: vi.fn(),
   rows: vi.fn(),
 }));
@@ -31,6 +32,11 @@ vi.mock("@/lib/supabase/route", () => ({
       signUp: supabase.signUp,
       signInWithPassword: supabase.signInWithPassword,
       exchangeCodeForSession: supabase.exchangeCodeForSession,
+      // Story 1.6: registering a company creates the caller's founding
+      // membership, so /api/companies now reissues the token before it
+      // answers. Without this the route throws here rather than returning the
+      // 200 these redirect and cross-site cases are measuring.
+      refreshSession: supabase.refreshSession,
     },
     from: () => ({
       select: () => ({
@@ -68,6 +74,7 @@ beforeEach(() => {
   supabase.exchangeCodeForSession
     .mockReset()
     .mockResolvedValue({ data: { session: { access_token: "at" } }, error: null });
+  supabase.refreshSession.mockReset().mockResolvedValue({ data: {}, error: null });
   supabase.rows.mockReset().mockReturnValue([]);
 });
 

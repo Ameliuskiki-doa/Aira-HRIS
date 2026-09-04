@@ -328,6 +328,109 @@ describe("no input reaches the database without passing its schema", () => {
   });
 });
 
+/* ── 2b. the session learns its new tenant ─────────────────────────────────── */
+
+/**
+ * Registration changes the caller from belonging to no tenant to belonging to
+ * one, and the tenant lives in the TOKEN.
+ *
+ * `register_company()` creates the founding membership, which decides what the
+ * next token will say -- and nothing about the token the caller is holding.
+ * Without a reissue the session carries empty claims until the 15-minute TTL
+ * expires (AD-9), and every tenant-scoped query in that window returns
+ * nothing.
+ *
+ * It shipped that way and an end-to-end signup against a real project did not
+ * reveal it, because three separately-correct behaviours covered for it: the
+ * confirmation token is legitimately claimless (the membership does not exist
+ * until this route runs), `UserBlock` omits a null role rather than inventing
+ * one, and `currentActiveCompany()` falls back to organization ownership so
+ * the company name renders anyway. From Story 1.8 the symptom is a brand-new
+ * user looking at an empty employee list that heals itself in fifteen minutes.
+ *
+ * `tests/tenant-context-reissue.test.ts` carries the general rule and can only
+ * read source text. This is the half that can actually watch the calls happen,
+ * in the order they have to happen in.
+ */
+describe("registering a company reissues the token", () => {
+  it("writes, reissues, and only then answers", async () => {
+    // The ORDER is the assertion. A reissue before the membership exists
+    // returns a token with the same empty claims, which is indistinguishable
+    // from no reissue at all and would satisfy any "was it called" check.
+    const response = await registerCompanyRoute(
+      post("http://localhost:3000/api/companies", VALID_COMPANY),
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.refreshSession).toHaveBeenCalledTimes(1);
+    expect(
+      supabase.refreshSession.mock.invocationCallOrder[0],
+      "the token was reissued before the membership was created, so it carries the same empty " +
+        "claims it did before the request",
+    ).toBeGreaterThan(supabase.rpc.mock.invocationCallOrder[0]);
+  });
+
+  it("reissues on a resumed registration too", async () => {
+    // `created: false` is the path most likely to need it, not least: a resumed
+    // call still runs `create_founding_membership()`, which is idempotent and
+    // repairs an account whose company predates memberships. Skipping the
+    // reissue when nothing was "created" would leave exactly those accounts
+    // claimless.
+    supabase.rpc.mockResolvedValue({
+      data: {
+        organization_id: "org",
+        company_id: "co",
+        legal_name: "PT Sudah Ada",
+        created: false,
+      },
+      error: null,
+    } as never);
+
+    const response = await registerCompanyRoute(
+      post("http://localhost:3000/api/companies", VALID_COMPANY),
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.refreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 500 rather than reporting a registration it cannot hand over", async () => {
+    // Fail closed. The rows are committed by now and the next natural refresh
+    // would pick them up -- but the caller is still holding a token with no
+    // tenant in it, so a 201 sends them to a dashboard that cannot see the
+    // company they just made. The form keeps them where they are on a non-ok
+    // response, which is why this has to be one.
+    supabase.refreshSession.mockResolvedValue({
+      data: {},
+      error: Object.assign(new Error("refresh_token_not_found"), { status: 400 }),
+    });
+
+    const response = await registerCompanyRoute(
+      post("http://localhost:3000/api/companies", VALID_COMPANY),
+    );
+
+    expect(response.status).toBe(500);
+    const body = await bodyOf(response);
+    expect(body).not.toHaveProperty("companyId");
+    expect(body).not.toHaveProperty("created");
+  });
+
+  it("says nothing about the schema when the reissue fails", async () => {
+    // Same rule as every other failure on this route: the cause goes to the
+    // log, never to a caller who only needs to know it did not work.
+    supabase.refreshSession.mockResolvedValue({
+      data: {},
+      error: Object.assign(new Error('relation "public.memberships" does not exist'), {
+        status: 500,
+      }),
+    });
+    const body = await bodyOf(
+      await registerCompanyRoute(post("http://localhost:3000/api/companies", VALID_COMPANY)),
+    );
+    expect(JSON.stringify(body)).not.toContain("memberships");
+  });
+});
+
 /* ── 3. required and optional are exactly these ────────────────────────────── */
 
 describe("the required set is exactly the legal name", () => {
