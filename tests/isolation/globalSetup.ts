@@ -24,6 +24,7 @@ import {
   APP_PASSWORD,
   APP_ROLE,
   assertAppRoleCannotBypassRls,
+  installSupabaseDefaultPrivileges,
   withAdmin,
 } from "./support/substrate";
 
@@ -58,6 +59,52 @@ async function reset(): Promise<void> {
     await client.query("create schema public");
     await client.query("grant usage on schema public to public");
   });
+}
+
+/**
+ * Makes the container as permissive as the real project, BEFORE migrating.
+ *
+ * This is the fix for a whole class of defect the gate could not see, and the
+ * class runs the opposite way from the one Story 1.4 worried about.
+ *
+ * Supabase ships `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon,
+ * authenticated` in `public`, from both `postgres` and `supabase_admin`. Every
+ * table a migration creates there is therefore BORN fully writable by both
+ * request roles, and a later `grant select ... to authenticated` adds nothing.
+ * A bare `postgres:17` container has no default ACLs at all, so the identical
+ * migration produced the intended narrow grants here and a wide-open table in
+ * production. Measured on the live project after Story 1.6 was applied:
+ *
+ *   public.memberships relacl:  anon = arwdDxtm | authenticated = arwdDxtm
+ *
+ * on a table designed to have no write surface whatsoever. RLS still held, so
+ * nothing leaked -- but "refused by privilege" had silently become "filtered
+ * to zero rows", which is the distinction the design turns on.
+ *
+ * The container was the STRICTER substrate, which is the direction nobody
+ * checks. `docs/07` and `scripts/isolation-db.mjs` both record the opposite
+ * trade -- "bare Postgres grants more than Supabase does" -- and that framing
+ * is what made this invisible: it is true of what a ROLE may do and false of
+ * what a TABLE is born with.
+ *
+ * So the container now inherits the same defaults. A migration that creates a
+ * table and forgets to revoke produces `arwdDxtm` here too, and the privilege
+ * assertion in `catalog-sweep.test.ts` fails on it locally, in CI, before it
+ * can reach a project where it would be real.
+ *
+ * The roles have to exist first: `20260827000000` creates them, but default
+ * privileges must be installed before the tables they apply to, so the guarded
+ * `create role` is repeated here. Dropping `public` in `reset()` drops the
+ * default ACL entries with it -- they are keyed on the schema -- which is why
+ * this runs on every setup rather than once.
+ */
+async function simulateSupabaseDefaultPrivileges(): Promise<void> {
+  // The statements live in `support/substrate.ts` so that this and the
+  // negative control in `catalog-sweep.test.ts` cannot drift apart -- one of
+  // them installs the hazard to exercise the migrations against it, the other
+  // installs it to prove the privilege reader can see it, and they have to be
+  // describing the same substrate for either to mean anything.
+  await withAdmin(installSupabaseDefaultPrivileges);
 }
 
 /**
@@ -105,6 +152,10 @@ async function bootstrapAndSeed(): Promise<void> {
 
 export async function setup(): Promise<void> {
   await reset();
+  // Before `migrate()`, not after: a default ACL applies to objects created
+  // while it is in force, so installing it afterwards would change nothing
+  // about the tables the migrations just made.
+  await simulateSupabaseDefaultPrivileges();
   migrate();
   await bootstrapAndSeed();
   await assertAppRoleCannotBypassRls();

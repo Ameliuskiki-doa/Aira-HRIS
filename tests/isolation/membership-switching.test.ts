@@ -31,6 +31,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import {
+  declaredPrivilegesFor,
+  normalisePrivileges,
+  readRequestRolePrivileges,
+} from "./support/catalog";
 import { PRINCIPAL_A, TENANT_A, TENANT_B } from "./support/fixtures";
 import {
   asRequest,
@@ -130,6 +135,37 @@ afterEach(async () => {
 });
 
 /* ── the three writes nothing may make ─────────────────────────────────────── */
+
+describe("the refusals below come from privilege, not from a policy", () => {
+  it("declares no write for either request role, and the substrate agrees", async () => {
+    // The precondition every assertion in this file depends on, stated once
+    // rather than assumed by each of them.
+    //
+    // It was assumed, and it was wrong in production. Supabase grants ALL on
+    // every new table in `public` to `anon` and `authenticated` by default, so
+    // `memberships` shipped fully writable there while the container reported
+    // SELECT-only. RLS still refused every write -- but by FILTERING it to
+    // zero rows, which is the outcome this table's design exists to avoid:
+    // "an attacker reads that as 'not yet'". If this test fails, the refusals
+    // below are still green and no longer mean what they say.
+    const declared = declaredPrivilegesFor("public", "memberships");
+    expect(declared).toBeDefined();
+    expect(normalisePrivileges(declared!.authenticated)).toEqual({
+      table: ["SELECT"],
+      columns: {},
+    });
+
+    const held = await withAdmin(readRequestRolePrivileges);
+    expect(normalisePrivileges(held["public.memberships"].authenticated)).toEqual({
+      table: ["SELECT"],
+      columns: {},
+    });
+    expect(normalisePrivileges(held["public.memberships"].anon)).toEqual({
+      table: [],
+      columns: {},
+    });
+  });
+});
 
 describe("no request path can write tenant_id", () => {
   it("refuses an UPDATE moving a membership into another company", async () => {

@@ -1071,7 +1071,16 @@ describe("the company's date and timezone", () => {
     // because it named the same locale the code did. Tying the expectation to
     // one shared constant is what makes them unable to drift: `app/layout.tsx`
     // now takes its `lang` from the same module this formatter reads.
-    expect(line.textContent).toMatch(/^\d{1,2} [A-Za-z]{3} \d{4} · WIB$/);
+    // The shape assertion pins day-month-year with a month *word*, not a month
+    // of any particular length. `[A-Za-z]{3}` was here until 2026-09-04 and it
+    // was a time bomb: `en-GB` abbreviates September to "Sept", four letters,
+    // and every other month to three. The suite passed for eleven months of
+    // the year and went red on the first day of the twelfth. What this check
+    // is actually for is rejecting a switch to `dateStyle: "full"`
+    // ("Friday, 4 September 2026") or to `en-US` ("Sep 4, 2026"), both of
+    // which start with a letter rather than a digit -- so length was never
+    // the property, and pinning it invented a failure the product never had.
+    expect(line.textContent).toMatch(/^\d{1,2} [A-Za-z]+ \d{4} · WIB$/);
 
     const lang = UI_LANG;
     const monthIn = (locale: string) =>
@@ -1105,7 +1114,7 @@ describe("the company's date and timezone", () => {
     for (const zone of INDONESIAN_TIME_ZONES) {
       expect(zoneLabel(zone)).toMatch(/^WI(B|TA|T)$/);
       expect(formatCompanyDate(new Date(), zone)).toMatch(
-        /^\d{1,2} [A-Za-z]{3} \d{4}$/,
+        /^\d{1,2} [A-Za-z]+ \d{4}$/,
       );
     }
   });
@@ -1117,7 +1126,7 @@ describe("the company's date and timezone", () => {
     // column yet.
     expect(() => formatCompanyDate(new Date(), "Asia/Atlantis")).not.toThrow();
     expect(formatCompanyDate(new Date(), "Asia/Atlantis")).toMatch(
-      /^\d{1,2} [A-Za-z]{3} \d{4}$/,
+      /^\d{1,2} [A-Za-z]+ \d{4}$/,
     );
     // And the line says so rather than quietly showing a plausible local date.
     expect(zoneLabel("Asia/Atlantis")).toBe("Asia/Atlantis");

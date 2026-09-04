@@ -189,6 +189,52 @@ export async function assertAppRoleCannotBypassRls(): Promise<void> {
   }
 }
 
+/**
+ * The default privileges a real Supabase project ships in `public`.
+ *
+ * Verbatim in effect, not in spirit: `ALTER DEFAULT PRIVILEGES ... GRANT ALL
+ * ON TABLES TO anon, authenticated`, from `postgres` and from
+ * `supabase_admin`. Every table a migration creates there is BORN with all
+ * eight privileges for both request roles; a bare `postgres:17` container
+ * ships none of this, so the identical migration produced a narrow table here
+ * and a wide-open one in production. `public.memberships` -- designed with no
+ * write surface at all -- was `arwdDxtm` for both roles on the live project.
+ *
+ * Exported rather than inlined in `globalSetup` because two callers need the
+ * same definition and they must not drift: `globalSetup` installs it before
+ * migrating, so the migrations are exercised against the hostile substrate;
+ * `catalog-sweep.test.ts` installs it inside a rolled-back transaction to
+ * prove the privilege reader actually sees a table born under it.
+ *
+ * `for role` is deliberately omitted: a default ACL is keyed on the role that
+ * CREATES the object, so targeting the current role is what reproduces the
+ * mechanism that matters.
+ */
+export const SUPABASE_DEFAULT_PRIVILEGES: readonly string[] = [
+  "alter default privileges in schema public grant all on tables to anon, authenticated",
+  "alter default privileges in schema public grant all on sequences to anon, authenticated",
+  "alter default privileges in schema public grant all on functions to anon, authenticated",
+];
+
+/** The guarded role creation those grants need in a bare container. */
+export const REQUEST_ROLE_BOOTSTRAP = `
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then
+    create role anon nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    create role authenticated nologin noinherit;
+  end if;
+end
+$$;`;
+
+/** Installs them on an open connection. Transactional, so it can be rolled back. */
+export async function installSupabaseDefaultPrivileges(client: Client): Promise<void> {
+  await client.query(REQUEST_ROLE_BOOTSTRAP);
+  for (const statement of SUPABASE_DEFAULT_PRIVILEGES) await client.query(statement);
+}
+
 /** Postgres error codes the suite distinguishes. */
 export const PG_INSUFFICIENT_PRIVILEGE = "42501";
 

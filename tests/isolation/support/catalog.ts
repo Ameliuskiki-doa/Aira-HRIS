@@ -161,6 +161,250 @@ export const SECURITY_DEFINER_EXEMPTIONS: readonly FunctionExemption[] = [
   },
 ];
 
+/* ── the privilege surface ─────────────────────────────────────────────────── */
+
+/**
+ * What each request role is allowed to hold on a relation.
+ *
+ * **This registry exists because the gate had a hole with a whole class of
+ * defect in it.** Every rule above this line is about POLICY -- RLS enabled,
+ * RLS forced, a policy present, the claim wrapped, no policy reaching `anon`.
+ * None of them is about PRIVILEGE, and a policy only ever runs on a statement
+ * the privilege system already let through.
+ *
+ * That gap was invisible because the two substrates disagree in a direction
+ * nobody checks. Supabase ships `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON
+ * TABLES TO anon, authenticated` in `public`; a bare `postgres:17` container
+ * ships none. So `public.memberships` -- a table designed to have no write
+ * surface at all -- was born `arwdDxtm` for both request roles on the live
+ * project and exactly `r` for `authenticated` here, from one migration. RLS
+ * held either way, so nothing leaked; what changed was that a refused write
+ * reported ZERO ROWS instead of `permission denied`, which is precisely the
+ * distinction the table's design turns on.
+ *
+ * `globalSetup.ts` now installs the same default ACLs in the container, so the
+ * defect reproduces locally. This registry is the other half: the declaration
+ * that says what SHOULD be held, so that reproducing it fails.
+ *
+ * The rules the sweep applies:
+ *
+ *   - a relation with no entry here FAILS. Not "is skipped" -- the failure
+ *     mode being defended against is a table nobody thought about, and a
+ *     registry you may omit yourself from defends against nothing;
+ *   - the privileges held must EXACTLY equal the declaration. Not "at least"
+ *     and not "at most": a missing grant is a broken feature and an extra one
+ *     is the hole above, and only equality catches both.
+ *
+ * `table` lists privileges held on the whole relation. `columns` lists
+ * privileges held on a column but NOT on the table -- a table-level grant
+ * already implies every column, so listing those again would be noise that
+ * drifts.
+ */
+export type RolePrivileges = {
+  readonly table: readonly string[];
+  readonly columns: Readonly<Record<string, readonly string[]>>;
+};
+
+export type DeclaredPrivileges = {
+  readonly anon: RolePrivileges;
+  readonly authenticated: RolePrivileges;
+  /** Why this is the right surface. Asserted non-trivial, like an exemption. */
+  readonly why: string;
+};
+
+/** Nothing at all, which is what `anon` gets everywhere. */
+const NOTHING: RolePrivileges = { table: [], columns: {} };
+
+export const REQUEST_ROLE_PRIVILEGES: Readonly<Record<string, DeclaredPrivileges>> = {
+  "public.organizations": {
+    anon: NOTHING,
+    authenticated: {
+      table: ["SELECT"],
+      // Column-level, from 20260827140000. `plan` is absent because billing
+      // sets the tier and a request path does not -- a customer upgrading
+      // themselves was reproduced as `UPDATE 1` before that grant was
+      // narrowed. `id` and `created_at` are absent because a caller choosing a
+      // primary key can squat on an id another tenant is about to be given,
+      // and one choosing `created_at` rewrites the tie-break that
+      // `register_company`'s resume lookup orders by.
+      columns: {
+        name: ["INSERT", "UPDATE"],
+        owner_user_id: ["INSERT", "UPDATE"],
+      },
+    },
+    why:
+      "Above the tenant boundary, keyed on ownership. Readable by its owner, and writable only in " +
+      "the two columns that are the owner's to set. No DELETE: deleting a billing account is an " +
+      "offboarding decision, not a request a form can make -- and it was granted in 20260827000000 " +
+      "and never claimed by anything since, which is how this registry found it.",
+  },
+  "public.companies": {
+    anon: NOTHING,
+    authenticated: {
+      // Table-level rather than column-level, deliberately: `companies_tenant`
+      // and `companies_create_under_owned_org` adjudicate these writes, and
+      // the purity suite proves it by asserting that a company carrying
+      // another tenant's id is refused BY POLICY. Narrowing `id` out of the
+      // INSERT grant would make that test pass for a privilege reason instead,
+      // and stop testing the policy at all.
+      table: ["SELECT", "INSERT", "UPDATE"],
+      columns: {},
+    },
+    why:
+      "The tenant boundary itself. Signup must be able to create one and its owner must be able to " +
+      "correct it, so INSERT and UPDATE are genuinely needed and are adjudicated by policy rather " +
+      "than by privilege. No DELETE: companies.id is the tenant_id every other table's rows hang " +
+      "off, so removing this row orphans the tenant's entire dataset behind a key that no longer " +
+      "resolves.",
+  },
+  "public.memberships": {
+    anon: NOTHING,
+    authenticated: { table: ["SELECT"], columns: {} },
+    why:
+      "SELECT and nothing else, which is the property the whole tenant-context design rests on. A " +
+      "writable tenant_id hands out the tenant boundary's own keys; a writable role is self-service " +
+      "privilege escalation; a writable last_active_at moves which company a COLLEAGUE lands in on " +
+      "their next refresh, which was reproduced as a successful write. The only write paths are " +
+      "switch_company() and create_founding_membership(), both scoped to the caller's own rows by " +
+      "construction, so the refusal here comes from privilege and says so rather than reporting " +
+      "zero rows an attacker reads as 'not yet'.",
+  },
+};
+
+export const declaredPrivilegesFor = (schema: string, name: string) =>
+  REQUEST_ROLE_PRIVILEGES[qualify(schema, name)];
+
+/** The roles a PostgREST request can become. Nothing else is swept for this. */
+export const REQUEST_ROLES = ["anon", "authenticated"] as const;
+export type RequestRoleName = (typeof REQUEST_ROLES)[number];
+
+/**
+ * Every table privilege Postgres 17 has, checked one by one.
+ *
+ * All eight, not the four anyone thinks about. Supabase's default ACL is
+ * `arwdDxtm`, which is INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES,
+ * TRIGGER and MAINTAIN -- so a check that looked only at the first four would
+ * report a table as clean while `anon` held TRUNCATE on it.
+ */
+export const TABLE_PRIVILEGES = [
+  "SELECT",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+  "TRUNCATE",
+  "REFERENCES",
+  "TRIGGER",
+  "MAINTAIN",
+] as const;
+
+/** The subset Postgres can grant on a single column. */
+export const COLUMN_PRIVILEGES = ["SELECT", "INSERT", "UPDATE", "REFERENCES"] as const;
+
+export type RelationPrivileges = Record<RequestRoleName, RolePrivileges>;
+
+/**
+ * What each request role can ACTUALLY do, asked of Postgres rather than parsed.
+ *
+ * `has_table_privilege` and `has_column_privilege` are used instead of reading
+ * `relacl` and `attacl`, and that is the load-bearing choice here: they answer
+ * "may this role do this", which folds in grants made to `PUBLIC` and grants
+ * inherited through role membership. An ACL parser sees `authenticated=r` and
+ * reports SELECT; it does not see the `GRANT ALL ON t TO public` two lines
+ * later that gave `anon` everything.
+ *
+ * A column privilege is reported only where the table-level one is absent. A
+ * table-level grant already implies every column, so listing them again would
+ * be a hundred lines of noise that drifts the moment a column is added.
+ */
+export async function readRequestRolePrivileges(
+  client: Client,
+): Promise<Record<string, RelationPrivileges>> {
+  const { rows: tableRows } = await client.query<{
+    schema: string;
+    name: string;
+    role: RequestRoleName;
+    privilege: string;
+    held: boolean;
+  }>(
+    `
+    select n.nspname as schema,
+           c.relname  as name,
+           r.rolname  as role,
+           p.privilege,
+           has_table_privilege(r.rolname, c.oid, p.privilege) as held
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      cross join unnest($1::text[]) as r(rolname)
+      cross join unnest($2::text[]) as p(privilege)
+     where c.relkind in ('r', 'p', 'v', 'm', 'f')
+       and n.nspname not in ('pg_catalog', 'information_schema')
+       and n.nspname not like 'pg\\_%'
+       and n.nspname <> all ($3::text[])
+       and exists (select 1 from pg_roles pr where pr.rolname = r.rolname)
+    `,
+    [[...REQUEST_ROLES], [...TABLE_PRIVILEGES], [...RUNNER_SCHEMAS]],
+  );
+
+  const { rows: columnRows } = await client.query<{
+    schema: string;
+    name: string;
+    role: RequestRoleName;
+    column: string;
+    privilege: string;
+  }>(
+    `
+    select n.nspname as schema,
+           c.relname  as name,
+           r.rolname  as role,
+           a.attname  as column,
+           p.privilege
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+      cross join unnest($1::text[]) as r(rolname)
+      cross join unnest($2::text[]) as p(privilege)
+     where c.relkind in ('r', 'p', 'v', 'm', 'f')
+       and n.nspname not in ('pg_catalog', 'information_schema')
+       and n.nspname not like 'pg\\_%'
+       and n.nspname <> all ($3::text[])
+       and exists (select 1 from pg_roles pr where pr.rolname = r.rolname)
+       and has_column_privilege(r.rolname, c.oid, a.attnum, p.privilege)
+       and not has_table_privilege(r.rolname, c.oid, p.privilege)
+    `,
+    [[...REQUEST_ROLES], [...COLUMN_PRIVILEGES], [...RUNNER_SCHEMAS]],
+  );
+
+  const held: Record<string, RelationPrivileges> = {};
+  const ensure = (schema: string, name: string) => {
+    const key = qualify(schema, name);
+    held[key] ??= {
+      anon: { table: [], columns: {} },
+      authenticated: { table: [], columns: {} },
+    };
+    return held[key];
+  };
+
+  for (const row of tableRows) {
+    const relation = ensure(row.schema, row.name);
+    if (row.held) (relation[row.role].table as string[]).push(row.privilege);
+  }
+  for (const row of columnRows) {
+    const relation = ensure(row.schema, row.name);
+    const columns = relation[row.role].columns as Record<string, string[]>;
+    (columns[row.column] ??= []).push(row.privilege);
+  }
+  return held;
+}
+
+/** Sorted, so an assertion compares sets rather than statement order. */
+export function normalisePrivileges(privileges: RolePrivileges): RolePrivileges {
+  const columns: Record<string, readonly string[]> = {};
+  for (const column of Object.keys(privileges.columns).sort()) {
+    columns[column] = [...privileges.columns[column]].sort();
+  }
+  return { table: [...privileges.table].sort(), columns };
+}
+
 /**
  * Schemas the migration runner writes for its own bookkeeping.
  *

@@ -34,6 +34,11 @@
 import type { Client } from "pg";
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  declaredPrivilegesFor,
+  normalisePrivileges,
+  readRequestRolePrivileges,
+} from "./support/catalog";
 import { PRINCIPAL_A, TENANT_A } from "./support/fixtures";
 import {
   asRequest,
@@ -323,6 +328,18 @@ describe("memberships still grants no write to any request role", () => {
   // function is that the TABLE stays shut: if adding the founding membership
   // had been done with a grant plus a policy, every assertion in
   // `membership-switching.test.ts` would have quietly become weaker.
+  //
+  // These assertions were briefly true of the CONTAINER and false of the
+  // product. Supabase grants ALL on every new table in `public` to `anon` and
+  // `authenticated` by default, so `memberships` shipped fully writable there
+  // while reading as SELECT-only here -- RLS held, but a refused write
+  // reported zero rows instead of `permission denied`, which is the exact
+  // distinction this table's design turns on. Two things changed as a result:
+  // `20260828000000` revokes explicitly rather than relying on nothing being
+  // granted, and `globalSetup` now installs the same default ACLs so the
+  // container stops flattering the migration. What is asserted below is the
+  // DECLARED intent from `REQUEST_ROLE_PRIVILEGES`, not whatever this
+  // substrate happens to do.
 
   it("still answers permission denied to an UPDATE, after the change", async () => {
     const registered = await register(FOUNDER, "PT Masih Terkunci");
@@ -363,22 +380,30 @@ describe("memberships still grants no write to any request role", () => {
     await expect(attempt).rejects.toMatchObject({ code: "42501" });
   });
 
-  it("holds no INSERT, UPDATE or DELETE privilege at all, by the catalog", async () => {
-    // Read from `has_table_privilege` as well as attempted, because a grant
-    // could be added for a column the behavioural tests do not happen to name.
-    const privileges = await withAdmin(async (client) => {
-      const { rows } = await client.query<{
-        ins: boolean;
-        upd: boolean;
-        del: boolean;
-      }>(
-        `select has_table_privilege('authenticated', 'public.memberships', 'INSERT') as ins,
-                has_table_privilege('authenticated', 'public.memberships', 'UPDATE') as upd,
-                has_table_privilege('authenticated', 'public.memberships', 'DELETE') as del`,
-      );
-      return rows[0];
-    });
-    expect(privileges).toEqual({ ins: false, upd: false, del: false });
+  it("declares SELECT and only SELECT, and holds exactly that", async () => {
+    // Two assertions, and they are different questions. The first is what the
+    // product INTENDS -- read from the registry the sweep enforces, so this
+    // test and the gate cannot drift into disagreeing about what this table is
+    // for. The second is what the substrate actually does. Asserting only the
+    // second is what made the earlier version of this test a description of
+    // the container; asserting only the first would be a description of a
+    // comment.
+    const declared = declaredPrivilegesFor("public", "memberships");
+    expect(declared, "memberships declares no privilege intent").toBeDefined();
+    expect(
+      normalisePrivileges(declared!.authenticated),
+      "memberships declares a write for authenticated; the founding membership was supposed to " +
+        "arrive through a function precisely so that it would not",
+    ).toEqual({ table: ["SELECT"], columns: {} });
+    expect(normalisePrivileges(declared!.anon)).toEqual({ table: [], columns: {} });
+
+    const held = await withAdmin(readRequestRolePrivileges);
+    expect(normalisePrivileges(held["public.memberships"].authenticated)).toEqual(
+      normalisePrivileges(declared!.authenticated),
+    );
+    expect(normalisePrivileges(held["public.memberships"].anon)).toEqual(
+      normalisePrivileges(declared!.anon),
+    );
   });
 });
 
