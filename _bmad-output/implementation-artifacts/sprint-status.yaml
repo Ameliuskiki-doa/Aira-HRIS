@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-21-2026 11:54
-last_updated: '09-05-2026 23:10'
+last_updated: '09-06-2026 03:20'
 project: Aira
 project_key: NOKEY
 tracking_system: file-system
@@ -46,7 +46,7 @@ development_status:
   1-8-employee-records-with-dated-assignments: backlog
   1-9-import-employees-from-a-spreadsheet: backlog
   1-10-personal-data-protection-and-the-audit-trail: backlog
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-invite-an-employee-to-their-own-account: backlog
@@ -59,7 +59,8 @@ development_status:
   2-8-clock-in-trust-is-more-than-gps: backlog
   2-9-lock-the-period-and-record-every-correction: backlog
   2-10-the-monthly-recap-reads-from-a-view-not-the-table: backlog
-  2-11-a-transactional-mail-provider-and-the-account-recovery-it-unblocks: backlog
+  2-11-a-transactional-mail-provider-and-the-account-recovery-it-unblocks: 
+    backlog
   epic-2-retrospective: optional
 
   epic-3: backlog
@@ -79,3 +80,74 @@ development_status:
 
   epic-8: backlog
   epic-8-retrospective: optional
+action_items:
+  - id: "epic-1-retro-item-1-protect-main-and-require-both-ci-jobs-th"
+    epic: 1
+    action: "Protect main and require both CI jobs; the isolation gate is advisory
+      until this lands"
+    owner: "project owner"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-2-make-currentactivecompany-fail-closed-wh"
+    epic: 1
+    action: "Make currentActiveCompany() fail closed when the claim names a tenant
+      absent from the membership list"
+    owner: "next story implementer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-3-assert-the-anon-execute-property-over-al"
+    epic: 1
+    action: "Assert the anon-EXECUTE property over all functions and revoke EXECUTE
+      from PUBLIC, before Story 1.7 adds any"
+    owner: "next story implementer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-4-make-the-access-token-hook-strip-every-c"
+    epic: 1
+    action: "Make the access token hook strip every claim it owns rather than three
+      named keys, before Story 1.7"
+    owner: "next story implementer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-5-route-sign-in-landing-through-the-member"
+    epic: 1
+    action: "Route sign-in landing through the membership-first resolver instead of
+      getOwnedCompany alone"
+    owner: "next story implementer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-6-bring-jwt_exp-and-the-access-token-hook"
+    epic: 1
+    action: "Bring jwt_exp and the access-token-hook enablement into version control
+      or a startup assertion"
+    owner: "project owner"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-7-replace-the-four-remaining-enumerations"
+    epic: 1
+    action: "Replace the four remaining enumerations (CSRF routes, suite registration,
+      MEMBERSHIP_ROLES, neutral palette) with the discovery already in the tree"
+    owner: "next story implementer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-8-make-write-surface-test-ts-actually-appl"
+    epic: 1
+    action: "Make write-surface.test.ts actually apply the migrations twice, as its
+      name claims"
+    owner: "next story implementer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-9-triage-the-65-entry-debt-ledger-to-one-d"
+    epic: 1
+    action: "Triage the 65-entry debt ledger to one disposition each: placed, accepted,
+      or deleted"
+    owner: "project owner"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
+  - id: "epic-1-retro-item-10-gate-definition-of-done-items-3-and-4-in"
+    epic: 1
+    action: "Gate definition-of-done items 3 and 4 (integer money, dated payroll config)
+      before Epic 5"
+    owner: "project owner"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
