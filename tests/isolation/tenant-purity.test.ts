@@ -33,6 +33,7 @@ import {
   asPrincipal,
   asRequest,
   readOrDenied,
+  updateOrDenied,
   withAdmin,
   type Principal,
 } from "./support/substrate";
@@ -119,16 +120,23 @@ describe.each(FIXTURES.map((fixture) => [fixture.table, fixture] as const))(
     });
 
     it("cannot reach the other tenant's row to update it", async () => {
-      const affected = await asPrincipal(PRINCIPAL_A, async (client) => {
-        const result = await client.query(
-          `update ${relation}
-              set ${identifier(fixture.isolationColumn)} = ${identifier(fixture.isolationColumn)}
-            where ${identifier(fixture.isolationColumn)} = $1`,
-          [fixture.expected(PRINCIPAL_B)],
-        );
-        return result.rowCount ?? 0;
-      });
-      expect(affected).toBe(0);
+      // Either mechanism counts, and the two are genuinely different. A policy
+      // that admits no row reports `UPDATE 0`; a column the role was never
+      // granted reports 42501 before a policy is consulted at all.
+      // `memberships` is the first relation protected the second way -- it
+      // grants SELECT and nothing else on purpose, so that a write to
+      // `tenant_id`, `role` or someone else's `last_active_at` is REFUSED
+      // rather than silently doing nothing. Insisting on `UPDATE 0` here would
+      // have forced a write grant to exist purely so this probe could resolve
+      // to a policy decision, which is a privilege granted for a test.
+      const outcome = await updateOrDenied(
+        `update ${relation}
+            set ${identifier(fixture.isolationColumn)} = ${identifier(fixture.isolationColumn)}
+          where ${identifier(fixture.isolationColumn)} = $1`,
+        [fixture.expected(PRINCIPAL_B)],
+        { role: "authenticated", claims: { kind: "principal", principal: PRINCIPAL_A } },
+      );
+      expect(outcome.affected).toBe(0);
     });
   },
 );

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import { AppTooltipProvider } from "@/components/app/tooltip";
 
+import type { SwitchableCompany } from "./company-switcher";
 import type { ShellCompany, ShellUser } from "./fixtures";
 import { AppHeader } from "./header";
 import { Sidebar } from "./sidebar";
@@ -17,6 +18,16 @@ export type AppShellProps = {
   readonly activeSegment: string | null;
   readonly company: ShellCompany;
   readonly user: ShellUser;
+  /**
+   * Every company this user holds an active membership in, ordered as the
+   * access token hook orders memberships. Empty or single means the header
+   * renders a plain label and no menu at all.
+   */
+  readonly companies?: readonly SwitchableCompany[];
+  /** `app_metadata.tenant_id` — which of them the session is acting in. */
+  readonly activeCompanyId?: string | null;
+  /** Injected by the browser suite so a switch can be observed, not followed. */
+  readonly onCompanySwitched?: () => void;
   readonly children: ReactNode;
 };
 
@@ -41,6 +52,9 @@ export function AppShell({
   activeSegment,
   company,
   user,
+  companies,
+  activeCompanyId,
+  onCompanySwitched,
   children,
 }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -74,6 +88,9 @@ export function AppShell({
             activeSegment={activeSegment}
             company={company}
             user={user}
+            companies={companies}
+            activeCompanyId={activeCompanyId}
+            onCompanySwitched={onCompanySwitched}
             drawerOpen={drawerOpen}
             onDrawerOpenChange={setDrawerOpen}
           />

@@ -459,6 +459,19 @@ So that employees can be assigned somewhere and approvals have something to rout
 **When** its migration is inspected
 **Then** it carries `tenant_id`, RLS enabled and forced, a tenant policy, and a `tenant_id`-leading index in the same file.
 
+**Given** a signed-in user
+**When** they sign out
+**Then** the session is cleared and they land on the sign-in screen
+**And** returning to any route under the application shell requires signing in again.
+
+> **Why sign-out is here.** It has nothing to do with company structure. It is
+> carried by this story because it is an hour of work, because nothing else in
+> either epic was ever going to pick it up, and because its absence is a real
+> hole: a shared or handed-over browser stays signed in as whoever used it
+> first. Added 2026-09-05 at the owner's direction, after a manual test made
+> the gap obvious. Password reset — the other half of the same gap — is
+> deliberately **not** here; see Story 2.11.
+
 ### Story 1.8: Employee records with dated assignments
 
 As an HR manager,
@@ -867,3 +880,38 @@ So that reading a report never competes with people clocking in.
 **When** it is implemented
 **Then** it reads a materialized view
 **And** no live aggregate query runs against the primary attendance table.
+
+### Story 2.11: A transactional mail provider, and the account recovery it unblocks
+
+As a user who cannot sign in,
+I want to reset my password,
+So that forgetting it does not cost me my account and my company's data.
+
+**Acceptance Criteria:**
+
+**Given** the project's auth settings
+**When** mail is sent
+**Then** it goes through a transactional provider over SMTP, not Supabase's built-in sender
+**And** the two-per-hour project-wide cap no longer applies.
+
+**Given** a user who has forgotten their password
+**When** they request a reset from the sign-in screen
+**Then** a reset mail is sent and the link lands on a screen that sets a new password
+**And** the link is single-use and expires.
+
+**Given** an address that has no account
+**When** a reset is requested for it
+**Then** the response is indistinguishable from one for an address that does — the same anti-enumeration rule the sign-in failure message already follows.
+
+**Given** the confirmation link from Story 1.5
+**When** it is sent after this story
+**Then** it goes through the same provider, and signing up repeatedly no longer exhausts a shared hourly budget.
+
+> **Why these are one story.** Password reset is not gated on its own
+> complexity — it is gated on mail. Aira can currently send two messages an
+> hour across the entire project, so the flow that recovers an account competes
+> for budget with the flow that creates one. Building the reset screens against
+> the built-in sender would produce a flow nobody can test twice in an hour and
+> a demo that fails in front of someone. The provider is the dependency; the
+> reset is what it unblocks, and until both exist a user who forgets their
+> password has no route back at all. Added 2026-09-05 at the owner's direction.

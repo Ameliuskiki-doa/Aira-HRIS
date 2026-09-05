@@ -44,8 +44,18 @@ const supabase = vi.hoisted(() => ({
   signUp: vi.fn(),
   signInWithPassword: vi.fn(),
   rpc: vi.fn(),
+  refreshSession: vi.fn(),
   /** What the `organizations` read returns. Empty until a test says otherwise. */
   rows: vi.fn(),
+  /**
+   * What `auth.getClaims()` returns — the access token's claims, which is
+   * where `tenant_id`, `role` and `employee_id` live. Story 1.6: the hook
+   * writes them into the TOKEN, so `getUser()` (which returns the stored user
+   * record) never carries them and cannot stand in for this.
+   */
+  getClaims: vi.fn(),
+  /** What `switch_company()` lists. Empty until a test says otherwise. */
+  memberships: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/route", () => ({
@@ -54,6 +64,8 @@ vi.mock("@/lib/supabase/route", () => ({
       getUser: supabase.getUser,
       signUp: supabase.signUp,
       signInWithPassword: supabase.signInWithPassword,
+      refreshSession: supabase.refreshSession,
+      getClaims: supabase.getClaims,
     },
     from: () => ({
       select: () => ({
@@ -75,7 +87,8 @@ vi.mock("@/lib/supabase/route", () => ({
  */
 vi.mock("@/lib/supabase/server", () => ({
   createServerSupabaseClient: async () => ({
-    auth: { getUser: supabase.getUser },
+    auth: { getUser: supabase.getUser, getClaims: supabase.getClaims },
+    rpc: supabase.rpc,
     from: () => ({
       select: () => ({
         order: () => ({
@@ -118,7 +131,15 @@ const { POST: signupRoute } = await import("@/app/api/auth/signup/route");
 const { POST: signinRoute } = await import("@/app/api/auth/signin/route");
 
 const SIGNED_IN = {
-  data: { user: { id: "00000000-0000-4000-8000-0000000000ff" } },
+  data: {
+    user: {
+      id: "00000000-0000-4000-8000-0000000000ff",
+      // Signup is by email (AD-7), so every account has one. It is also the
+      // display name the header falls back to until Story 1.8 creates
+      // `employees` and a real name exists to prefer.
+      email: "hr@nusantara.co.id",
+    },
+  },
   error: null,
 };
 const SIGNED_OUT = { data: { user: null }, error: null };
@@ -149,12 +170,39 @@ beforeEach(() => {
   supabase.rpc.mockReset();
   supabase.getUser.mockResolvedValue(SIGNED_IN);
   supabase.signUp.mockResolvedValue({ data: { user: null, session: null }, error: null });
-  supabase.rpc.mockResolvedValue({
-    data: { organization_id: "org", company_id: "co", created: true },
-    error: null,
+  // One `rpc` for two functions, dispatched on the name PostgREST is given.
+  // `register_company` and `switch_company` go through the same client, so a
+  // single `mockResolvedValue` would answer the switcher's list with a
+  // registration result -- which parses to "no companies" and would make the
+  // layout assertions below quietly vacuous.
+  supabase.rpc.mockImplementation(async (fn: string) => {
+    if (fn === "switch_company") {
+      return {
+        data: { switched: false, companies: supabase.memberships() },
+        error: null,
+      };
+    }
+    return {
+      data: {
+        organization_id: "org",
+        company_id: "co",
+        legal_name: "PT Terdaftar",
+        created: true,
+      },
+      error: null,
+    };
   });
   supabase.rows.mockReset();
   supabase.rows.mockReturnValue([]);
+  supabase.memberships.mockReset();
+  supabase.memberships.mockReturnValue([]);
+  supabase.getClaims.mockReset();
+  supabase.getClaims.mockResolvedValue({
+    data: { claims: { app_metadata: {} } },
+    error: null,
+  });
+  supabase.refreshSession.mockReset();
+  supabase.refreshSession.mockResolvedValue({ data: {}, error: null });
 });
 
 /* ── 1. the session gate ───────────────────────────────────────────────────── */
@@ -272,11 +320,114 @@ describe("no input reaches the database without passing its schema", () => {
     supabase.rpc.mockResolvedValue({
       data: { organization_id: "org", company_id: "co", created: false },
       error: null,
-    });
+    } as never);
     const response = await registerCompanyRoute(
       post("http://localhost:3000/api/companies", VALID_COMPANY),
     );
     expect(response.status).toBe(200);
+  });
+});
+
+/* ── 2b. the session learns its new tenant ─────────────────────────────────── */
+
+/**
+ * Registration changes the caller from belonging to no tenant to belonging to
+ * one, and the tenant lives in the TOKEN.
+ *
+ * `register_company()` creates the founding membership, which decides what the
+ * next token will say -- and nothing about the token the caller is holding.
+ * Without a reissue the session carries empty claims until the 15-minute TTL
+ * expires (AD-9), and every tenant-scoped query in that window returns
+ * nothing.
+ *
+ * It shipped that way and an end-to-end signup against a real project did not
+ * reveal it, because three separately-correct behaviours covered for it: the
+ * confirmation token is legitimately claimless (the membership does not exist
+ * until this route runs), `UserBlock` omits a null role rather than inventing
+ * one, and `currentActiveCompany()` falls back to organization ownership so
+ * the company name renders anyway. From Story 1.8 the symptom is a brand-new
+ * user looking at an empty employee list that heals itself in fifteen minutes.
+ *
+ * `tests/tenant-context-reissue.test.ts` carries the general rule and can only
+ * read source text. This is the half that can actually watch the calls happen,
+ * in the order they have to happen in.
+ */
+describe("registering a company reissues the token", () => {
+  it("writes, reissues, and only then answers", async () => {
+    // The ORDER is the assertion. A reissue before the membership exists
+    // returns a token with the same empty claims, which is indistinguishable
+    // from no reissue at all and would satisfy any "was it called" check.
+    const response = await registerCompanyRoute(
+      post("http://localhost:3000/api/companies", VALID_COMPANY),
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.refreshSession).toHaveBeenCalledTimes(1);
+    expect(
+      supabase.refreshSession.mock.invocationCallOrder[0],
+      "the token was reissued before the membership was created, so it carries the same empty " +
+        "claims it did before the request",
+    ).toBeGreaterThan(supabase.rpc.mock.invocationCallOrder[0]);
+  });
+
+  it("reissues on a resumed registration too", async () => {
+    // `created: false` is the path most likely to need it, not least: a resumed
+    // call still runs `create_founding_membership()`, which is idempotent and
+    // repairs an account whose company predates memberships. Skipping the
+    // reissue when nothing was "created" would leave exactly those accounts
+    // claimless.
+    supabase.rpc.mockResolvedValue({
+      data: {
+        organization_id: "org",
+        company_id: "co",
+        legal_name: "PT Sudah Ada",
+        created: false,
+      },
+      error: null,
+    } as never);
+
+    const response = await registerCompanyRoute(
+      post("http://localhost:3000/api/companies", VALID_COMPANY),
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.refreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 500 rather than reporting a registration it cannot hand over", async () => {
+    // Fail closed. The rows are committed by now and the next natural refresh
+    // would pick them up -- but the caller is still holding a token with no
+    // tenant in it, so a 201 sends them to a dashboard that cannot see the
+    // company they just made. The form keeps them where they are on a non-ok
+    // response, which is why this has to be one.
+    supabase.refreshSession.mockResolvedValue({
+      data: {},
+      error: Object.assign(new Error("refresh_token_not_found"), { status: 400 }),
+    });
+
+    const response = await registerCompanyRoute(
+      post("http://localhost:3000/api/companies", VALID_COMPANY),
+    );
+
+    expect(response.status).toBe(500);
+    const body = await bodyOf(response);
+    expect(body).not.toHaveProperty("companyId");
+    expect(body).not.toHaveProperty("created");
+  });
+
+  it("says nothing about the schema when the reissue fails", async () => {
+    // Same rule as every other failure on this route: the cause goes to the
+    // log, never to a caller who only needs to know it did not work.
+    supabase.refreshSession.mockResolvedValue({
+      data: {},
+      error: Object.assign(new Error('relation "public.memberships" does not exist'), {
+        status: 500,
+      }),
+    });
+    const body = await bodyOf(
+      await registerCompanyRoute(post("http://localhost:3000/api/companies", VALID_COMPANY)),
+    );
+    expect(JSON.stringify(body)).not.toContain("memberships");
   });
 });
 
@@ -669,6 +820,164 @@ describe("the screens behind the shell need a session too", () => {
       branchCount: 0,
     });
     expect(rendered.props.company.legalName).not.toBe("PT Nusantara Rasa");
+  });
+});
+
+/* ── the header's person, and where each fact comes from ───────────────────── */
+
+/**
+ * Story 1.6 replaced the last of the header's invented facts.
+ *
+ * Story 1.3 shipped a hardcoded "Sari Wijaya / HR Manager", which was an
+ * invention wearing the clothes of real data. What replaces it is the person's
+ * own email address and the role the ACCESS TOKEN carries -- and the second
+ * half is the one worth asserting, because reading a role from a query would
+ * quietly reintroduce the `memberships` lookup that putting it in the claim
+ * exists to remove (AD-25, NFR-15).
+ */
+describe("the header renders the signed-in person, not a fixture", () => {
+  const loadLayout = async () => {
+    const layoutModule = await import("@/app/(app)/layout");
+    return layoutModule.default as unknown as (props: {
+      children: unknown;
+    }) => Promise<{
+      props: {
+        company: Record<string, unknown>;
+        user: Record<string, unknown>;
+        companies: Array<Record<string, unknown>>;
+        activeCompanyId: string | null;
+      };
+    }>;
+  };
+
+  it("falls back to the email address, because there is no name until Story 1.8", async () => {
+    const rendered = await (await loadLayout())({ children: null });
+    expect(rendered.props.user).toMatchObject({
+      name: "hr@nusantara.co.id",
+      initials: "HR",
+    });
+    // And explicitly not the Story 1.3 placeholder.
+    expect(rendered.props.user.name).not.toBe("Sari Wijaya");
+  });
+
+  it("takes the role from the token's app_metadata and from nowhere else", async () => {
+    supabase.getClaims.mockResolvedValue({
+      data: {
+        claims: {
+          app_metadata: {
+            tenant_id: "00000000-0000-4000-8000-00000000a001",
+            role: "hr_staff",
+            employee_id: null,
+          },
+        },
+      },
+      error: null,
+    });
+    const rendered = await (await loadLayout())({ children: null });
+    // The label, not the enum value: `hr_staff` is a database value, not copy.
+    expect(rendered.props.user.role).toBe("HR Staff");
+    expect(rendered.props.activeCompanyId).toBe("00000000-0000-4000-8000-00000000a001");
+  });
+
+  it("shows no role at all when the session carries none", async () => {
+    // Every account looks like this until a membership exists for it. Null
+    // rather than a default: a role on screen the database does not grant is
+    // worse than a blank.
+    const rendered = await (await loadLayout())({ children: null });
+    expect(rendered.props.user.role).toBeNull();
+  });
+
+  it("counts memberships from the switcher's own list, so the two cannot disagree", async () => {
+    supabase.rows.mockReturnValue([
+      {
+        id: "org-1",
+        plan: "core",
+        companies: [{ id: "co-1", legal_name: "PT Sejahtera Abadi", timezone: "Asia/Jakarta" }],
+      },
+    ]);
+    supabase.memberships.mockReturnValue([
+      { company_id: "co-1", legal_name: "PT Sejahtera Abadi", timezone: "Asia/Jakarta", plan: "core", role: "admin", employee_id: null, last_active_at: null },
+      { company_id: "co-2", legal_name: "PT Makmur Jaya", timezone: "Asia/Makassar", plan: "core", role: "hr_staff", employee_id: null, last_active_at: null },
+    ]);
+
+    const rendered = await (await loadLayout())({ children: null });
+    expect(rendered.props.company.membershipCount).toBe(2);
+    expect(rendered.props.companies).toHaveLength(2);
+    expect(rendered.props.companies[1]).toEqual({
+      companyId: "co-2",
+      legalName: "PT Makmur Jaya",
+    });
+  });
+
+  it("takes the header from the membership matching the tenant CLAIM", async () => {
+    // Not `companies[0]`. The list is ordered as the hook orders memberships,
+    // so its first entry is what the NEXT token will carry; the claim is what
+    // THIS one carries, and it is the value every row below the header was
+    // filtered by. Picking the first entry would put one company's name over
+    // another company's data for as long as a token outlives a switch —
+    // reproduced here by ordering the list with the OTHER company first.
+    supabase.memberships.mockReturnValue([
+      { company_id: "co-b", legal_name: "PT Makmur Jaya", timezone: "Asia/Makassar", plan: "payroll", role: "admin", employee_id: null, last_active_at: "2026-08-27T10:00:00Z" },
+      { company_id: "co-a", legal_name: "PT Sejahtera Abadi", timezone: "Asia/Jayapura", plan: "core", role: "hr_staff", employee_id: null, last_active_at: null },
+    ]);
+    supabase.getClaims.mockResolvedValue({
+      data: { claims: { app_metadata: { tenant_id: "co-a", role: "hr_staff" } } },
+      error: null,
+    });
+
+    const rendered = await (await loadLayout())({ children: null });
+    expect(rendered.props.company).toMatchObject({
+      legalName: "PT Sejahtera Abadi",
+      timeZone: "Asia/Jayapura",
+      planLabel: "Core plan",
+      membershipCount: 2,
+    });
+  });
+
+  it("falls back to organization ownership for an account with no membership", async () => {
+    // Every account registered before the founding membership existed. The
+    // fallback is what stops this story blanking the header for all of them;
+    // it stops being reachable once each has been repaired.
+    supabase.memberships.mockReturnValue([]);
+    supabase.rows.mockReturnValue([
+      {
+        id: "org-1",
+        plan: "core",
+        companies: [{ id: "co-1", legal_name: "PT Sebelum Keanggotaan", timezone: "Asia/Jakarta" }],
+      },
+    ]);
+
+    const rendered = await (await loadLayout())({ children: null });
+    expect(rendered.props.company).toMatchObject({
+      legalName: "PT Sebelum Keanggotaan",
+      planLabel: "Core plan",
+      membershipCount: 0,
+    });
+  });
+
+  it("does not borrow an ownership company when the claim names one the user is not in", async () => {
+    // A stale claim naming a company that is not in the membership list is a
+    // token that outlived a deactivation. The ownership fallback answering
+    // here is correct only because the ONLY thing it can return is a company
+    // this caller owns — it cannot reach one they do not.
+    supabase.memberships.mockReturnValue([]);
+    supabase.getClaims.mockResolvedValue({
+      data: { claims: { app_metadata: { tenant_id: "co-gone", role: "admin" } } },
+      error: null,
+    });
+    supabase.rows.mockReturnValue([]);
+
+    const rendered = await (await loadLayout())({ children: null });
+    expect(rendered.props.company).toMatchObject({ legalName: "No company yet" });
+  });
+
+  it("reads the company list through switch_company, never through the table", async () => {
+    // `memberships` is keyed on the ACTIVE tenant, so a direct read returns
+    // exactly the one company a switcher does not need to be told about. The
+    // RPC is the only surface that spans tenants, and it is scoped to the
+    // caller's own rows by construction.
+    await (await loadLayout())({ children: null });
+    expect(supabase.rpc).toHaveBeenCalledWith("switch_company", { p_company_id: null });
   });
 });
 

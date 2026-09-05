@@ -42,6 +42,25 @@ export const PRINCIPAL_FRESH: Principal = {
 export const ORG_A = "00000000-0000-4000-8000-00000000a003";
 export const ORG_B = "00000000-0000-4000-8000-00000000b003";
 
+/**
+ * A principal holding memberships in BOTH tenants -- the shape the company
+ * switcher exists for, and the shape no fixture had until Story 1.6.
+ *
+ * Recorded in deferred-work after Story 1.5: A and B owned disjoint
+ * organizations, so "this table shows one tenant's rows" and "this table shows
+ * one owner's rows" were indistinguishable in every assertion. This principal
+ * tells them apart -- it is a member of both companies, so a table that leaked
+ * on membership rather than on the active claim would show it two tenants at
+ * once.
+ *
+ * Its active claim is tenant A. That is the whole point: it must see tenant A
+ * and only tenant A, despite genuinely belonging to both.
+ */
+export const PRINCIPAL_MULTI: Principal = {
+  userId: "00000000-0000-4000-8000-00000000d002",
+  tenantId: TENANT_A,
+};
+
 export type TableFixture = {
   schema: string;
   table: string;
@@ -87,6 +106,33 @@ export const FIXTURES: readonly TableFixture[] = [
          values ($1, $2, 'PT Sejahtera Abadi', 'Asia/Jakarta'),
                 ($3, $4, 'PT Makmur Jaya',     'Asia/Makassar')`,
         [TENANT_A, ORG_A, TENANT_B, ORG_B],
+      );
+    },
+  },
+  {
+    schema: "public",
+    table: "memberships",
+    isolationColumn: "tenant_id",
+    expected: (principal) => principal.tenantId ?? "",
+    seed: async (client) => {
+      // Four rows over two tenants, and the fourth is the interesting one:
+      // PRINCIPAL_MULTI holds a membership in each company, so any surface
+      // that keys on "rows belonging to this user" rather than on the active
+      // tenant claim shows it both at once.
+      //
+      // `last_active_at` is set on the multi-tenant principal's tenant-A row
+      // and left null on its tenant-B row, so the hook's ordering has
+      // something to resolve rather than a coin to flip. The dedicated
+      // ordering cases live in access-token-hook.test.ts and build their own
+      // rows, so nothing here has to be perturbed to test a tie-break.
+      await client.query(
+        `insert into public.memberships
+           (tenant_id, user_id, role, is_active, last_active_at)
+         values ($1, $2, 'admin',      true, now()),
+                ($3, $4, 'hr_manager', true, now()),
+                ($1, $5, 'hr_staff',   true, now()),
+                ($3, $5, 'accountant', true, null)`,
+        [TENANT_A, PRINCIPAL_A.userId, TENANT_B, PRINCIPAL_B.userId, PRINCIPAL_MULTI.userId],
       );
     },
   },

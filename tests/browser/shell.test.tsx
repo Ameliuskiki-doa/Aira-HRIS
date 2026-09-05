@@ -191,7 +191,7 @@ function renderRoute(segment: string) {
     <LayoutRouterContext.Provider
       value={{ parentTree: routerTree(segment) } as never}
     >
-      <AppShellRoute company={SHELL_COMPANY_FIXTURE}>
+      <AppShellRoute company={SHELL_COMPANY_FIXTURE} user={SHELL_USER_FIXTURE}>
         <p>Isi halaman</p>
       </AppShellRoute>
     </LayoutRouterContext.Provider>,
@@ -1071,7 +1071,16 @@ describe("the company's date and timezone", () => {
     // because it named the same locale the code did. Tying the expectation to
     // one shared constant is what makes them unable to drift: `app/layout.tsx`
     // now takes its `lang` from the same module this formatter reads.
-    expect(line.textContent).toMatch(/^\d{1,2} [A-Za-z]{3} \d{4} · WIB$/);
+    // The shape assertion pins day-month-year with a month *word*, not a month
+    // of any particular length. `[A-Za-z]{3}` was here until 2026-09-04 and it
+    // was a time bomb: `en-GB` abbreviates September to "Sept", four letters,
+    // and every other month to three. The suite passed for eleven months of
+    // the year and went red on the first day of the twelfth. What this check
+    // is actually for is rejecting a switch to `dateStyle: "full"`
+    // ("Friday, 4 September 2026") or to `en-US` ("Sep 4, 2026"), both of
+    // which start with a letter rather than a digit -- so length was never
+    // the property, and pinning it invented a failure the product never had.
+    expect(line.textContent).toMatch(/^\d{1,2} [A-Za-z]+ \d{4} · WIB$/);
 
     const lang = UI_LANG;
     const monthIn = (locale: string) =>
@@ -1105,7 +1114,7 @@ describe("the company's date and timezone", () => {
     for (const zone of INDONESIAN_TIME_ZONES) {
       expect(zoneLabel(zone)).toMatch(/^WI(B|TA|T)$/);
       expect(formatCompanyDate(new Date(), zone)).toMatch(
-        /^\d{1,2} [A-Za-z]{3} \d{4}$/,
+        /^\d{1,2} [A-Za-z]+ \d{4}$/,
       );
     }
   });
@@ -1117,7 +1126,7 @@ describe("the company's date and timezone", () => {
     // column yet.
     expect(() => formatCompanyDate(new Date(), "Asia/Atlantis")).not.toThrow();
     expect(formatCompanyDate(new Date(), "Asia/Atlantis")).toMatch(
-      /^\d{1,2} [A-Za-z]{3} \d{4}$/,
+      /^\d{1,2} [A-Za-z]+ \d{4}$/,
     );
     // And the line says so rather than quietly showing a plausible local date.
     expect(zoneLabel("Asia/Atlantis")).toBe("Asia/Atlantis");
@@ -1286,6 +1295,181 @@ describe("the frame itself", () => {
     // Every company created in Story 1.5 starts here.
     expect(requireSlot("company-switcher")).not.toHaveTextContent("branch");
     expect(slot("branch-count")).toBeNull();
+  });
+
+  it("omits the role line entirely when the session carries no role", () => {
+    // A session with no active membership genuinely has no role. An empty line
+    // under the name reads as a rendering fault, and a default would put a
+    // permission on screen the database does not grant.
+    render(
+      <AppShell
+        activeSegment={null}
+        company={SHELL_COMPANY_FIXTURE}
+        user={{ ...SHELL_USER_FIXTURE, role: null }}
+      >
+        <p>Isi</p>
+      </AppShell>,
+    );
+    expect(slot("user-role")).toBeNull();
+    expect(requireSlot("user-name")).toHaveTextContent(SHELL_USER_FIXTURE.name);
+  });
+});
+
+/* ── switching company ────────────────────────────────────────────────────── */
+
+/**
+ * The multi-company switcher, which is a **session change and not a filter**.
+ *
+ * Every assertion here is about what the user can operate and where they end
+ * up, because the half that cannot be measured in a browser — the token being
+ * reissued — is proved in `tests/isolation/membership-switching.test.ts`
+ * against a real database. What this file owns is the seam: that choosing a
+ * company posts to the switch endpoint, that success navigates to the
+ * dashboard root, and that failure does neither.
+ *
+ * `onSwitched` is injected rather than stubbed globally. Its default is a full
+ * document navigation to `/` — which is the real behaviour, and which would
+ * take the test runner with it.
+ */
+describe("the company switcher above one membership", () => {
+  const COMPANIES = [
+    { companyId: "co-a", legalName: "PT Sejahtera Abadi" },
+    { companyId: "co-b", legalName: "PT Makmur Jaya" },
+  ];
+
+  const MANY = Array.from({ length: 9 }, (_, index) => ({
+    companyId: `co-${index}`,
+    legalName: `PT Cabang ${index}`,
+  }));
+
+  let posted: Array<{ url: string; body: unknown }> = [];
+  let respondWith: () => Response;
+  let switched: number;
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    posted = [];
+    switched = 0;
+    respondWith = () => new Response(JSON.stringify({ redirectTo: "/" }), { status: 200 });
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      posted.push({
+        url: String(input),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+      });
+      return respondWith();
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const renderSwitcher = (
+    companies: ReadonlyArray<{ companyId: string; legalName: string }> = COMPANIES,
+    activeCompanyId: string | null = "co-a",
+  ) =>
+    render(
+      <AppShell
+        activeSegment={null}
+        company={{ ...SHELL_COMPANY_FIXTURE, membershipCount: companies.length }}
+        user={SHELL_USER_FIXTURE}
+        companies={companies}
+        activeCompanyId={activeCompanyId}
+        onCompanySwitched={() => {
+          switched += 1;
+        }}
+      >
+        <p>Isi</p>
+      </AppShell>,
+    );
+
+  const openPanel = async () => {
+    await userEvent.click(requireSlot("company-switcher"));
+    return vi.waitFor(() => requireSlot("company-switcher-panel"));
+  };
+
+  it("becomes a real control, with a caret and an accessible name", async () => {
+    renderSwitcher();
+    const trigger = requireSlot("company-switcher");
+    // The single-membership form is a <p>. This one has to be operable, which
+    // means it has to be a button with a name.
+    expect(trigger.tagName.toLowerCase()).toBe("button");
+    // The name is the company the session is IN, which is what the pill has
+    // always shown — the list is what the panel is for.
+    expect(trigger).toHaveAccessibleName(
+      new RegExp(SHELL_COMPANY_FIXTURE.legalName),
+    );
+    expect(slot("company-switcher-caret")).not.toBeNull();
+  });
+
+  it("lists every company and marks the one the session is acting in", async () => {
+    renderSwitcher();
+    const panel = await openPanel();
+    const items = panel.querySelectorAll('[data-slot="company-switcher-item"]');
+    expect(items).toHaveLength(2);
+    expect(panel).toHaveTextContent("PT Makmur Jaya");
+    // Marked, not merely first. The list is ordered as the access token hook
+    // orders memberships, so "first" and "current" agree today and would stop
+    // agreeing the moment anything else sorted it.
+    const current = panel.querySelectorAll('[data-slot="company-switcher-item"][data-current]');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent("PT Sejahtera Abadi");
+  });
+
+  it("posts the chosen company and then leaves for the dashboard root", async () => {
+    renderSwitcher();
+    const panel = await openPanel();
+    const other = within(panel).getByText("PT Makmur Jaya");
+    await userEvent.click(other);
+
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].url).toContain("/api/memberships/switch");
+    expect(posted[0].body).toEqual({ companyId: "co-b" });
+    // The navigation is what makes a deep link into the previous company fail
+    // to survive the switch. Counted rather than followed.
+    await vi.waitFor(() => expect(switched).toBe(1));
+  });
+
+  it("does nothing at all when the current company is chosen again", async () => {
+    renderSwitcher();
+    const panel = await openPanel();
+    await userEvent.click(within(panel).getByText("PT Sejahtera Abadi"));
+    // No request, and no navigation. Reissuing a token to arrive where you
+    // already are is a page reload dressed as a feature.
+    expect(posted).toHaveLength(0);
+    expect(switched).toBe(0);
+  });
+
+  it("fails closed when the switch is refused", async () => {
+    // Never a silent fall back to the company it was already in: a header
+    // naming one company over rows belonging to another is the worst state
+    // this screen can reach.
+    respondWith = () => new Response(JSON.stringify({ error: "no" }), { status: 403 });
+    renderSwitcher();
+    const panel = await openPanel();
+    await userEvent.click(within(panel).getByText("PT Makmur Jaya"));
+
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(switched, "it navigated away on a refused switch").toBe(0);
+    const alert = await vi.waitFor(() => screen.getByRole("alert"));
+    expect(alert).toHaveTextContent(SHELL_COMPANY_FIXTURE.legalName);
+  });
+
+  it("offers no search until the list stops fitting in one glance", async () => {
+    renderSwitcher();
+    await openPanel();
+    expect(slot("company-switcher-search")).toBeNull();
+  });
+
+  it("offers search above seven companies, and filters on it", async () => {
+    renderSwitcher(MANY, MANY[0].companyId);
+    const panel = await openPanel();
+    const search = within(panel).getByRole("searchbox", { name: /search/i });
+    await userEvent.fill(search, "Cabang 4");
+    await vi.waitFor(() =>
+      expect(panel.querySelectorAll('[data-slot="company-switcher-item"]')).toHaveLength(1),
+    );
+    expect(panel).toHaveTextContent("PT Cabang 4");
   });
 });
 

@@ -27,24 +27,36 @@ import { describe, expect, it } from "vitest";
 
 import {
   applicationRelations,
+  COLUMN_PRIVILEGES,
+  declaredPrivilegesFor,
   EXEMPTIONS,
+  normalisePrivileges,
   readFunctions,
   readPolicies,
   readRelations,
+  readRequestRolePrivileges,
   referencesClaim,
+  REQUEST_ROLE_PRIVILEGES,
+  REQUEST_ROLES,
   RLS_CAPABLE,
   SECURITY_DEFINER_EXEMPTIONS,
+  TABLE_PRIVILEGES,
   unwrappedClaimCalls,
   waivedFor,
 } from "./support/catalog";
 import { fixtureFor } from "./support/fixtures";
-import { appRolePrivileges, withAdmin } from "./support/substrate";
+import {
+  appRolePrivileges,
+  installSupabaseDefaultPrivileges,
+  withAdmin,
+} from "./support/substrate";
 
-const { relations, policies, functions, privileges } = await withAdmin(async (client) => ({
+const { relations, policies, functions, privileges, grants } = await withAdmin(async (client) => ({
   relations: await readRelations(client),
   policies: await readPolicies(client),
   functions: await readFunctions(client),
   privileges: await appRolePrivileges(),
+  grants: await readRequestRolePrivileges(client),
 }));
 
 const swept = applicationRelations(relations);
@@ -200,6 +212,33 @@ describe.each(swept.map((relation) => [relation.qualified, relation] as const))(
       ).toBeDefined();
     });
 
+    it("declares what anon and authenticated may hold", () => {
+      // A relation with no declaration FAILS rather than being skipped. The
+      // failure mode this defends against is a table nobody thought about, and
+      // a registry a table may omit itself from defends against nothing.
+      expect(
+        declaredPrivilegesFor(relation.schema, relation.name),
+        `${relation.qualified} exists in the catalog but declares no privilege intent in ` +
+          `REQUEST_ROLE_PRIVILEGES. On Supabase every table in public is BORN with ALL privileges ` +
+          `for anon and authenticated -- so a table that says nothing about its grants is not a ` +
+          `table with no grants, it is a table with all of them.`,
+      ).toBeDefined();
+    });
+
+    it.each([...REQUEST_ROLES])("holds exactly the privileges it declares, for %s", (role) => {
+      const declared = declaredPrivilegesFor(relation.schema, relation.name);
+      if (!declared) return; // The assertion above owns this failure.
+      const actual = grants[relation.qualified] ?? { table: [], columns: {} };
+      expect(
+        normalisePrivileges(actual[role] ?? { table: [], columns: {} }),
+        `${relation.qualified} does not hold what it declares for ${role}. ` +
+          `An EXTRA privilege is the Supabase default ACL leaking through -- the migration needs ` +
+          `\`revoke all on ${relation.qualified} from ${role}\` before its grants, because ` +
+          `\`revoke ... from public\` does not remove an explicit role grant. A MISSING one is a ` +
+          `feature that will fail with 42501 in production.`,
+      ).toEqual(normalisePrivileges(declared[role]));
+    });
+
     it("declares a non-tenant_id isolation column only if exempted from the column rule", () => {
       // `isolationColumn` drives both the purity assertion and the index rule,
       // so an unrestricted override could retarget the index rule onto the
@@ -304,11 +343,32 @@ describe("functions in public", () => {
     ).toEqual([]);
   });
 
-  it("has no security definer exemptions yet", () => {
-    // Pinned empty so the first entry is a visible change rather than a line
-    // in a migration nobody reads. Story 1.6's access-token hook is the likely
-    // first occupant.
-    expect(SECURITY_DEFINER_EXEMPTIONS).toEqual([]);
+  it("holds exactly the three agreed security definer exemptions", () => {
+    // Pinned empty through Story 1.5 so the first entry would be a visible
+    // change rather than a line in a migration nobody reads. Story 1.6 fills
+    // it, and the pin MOVES rather than being deleted -- which is the list
+    // doing its job: the third entry was a decision taken by the owner after
+    // the story stopped short of taking it alone. A fourth is the same kind of
+    // decision, and this line is what makes adding one impossible to do
+    // quietly.
+    expect(SECURITY_DEFINER_EXEMPTIONS.map((entry) => entry.name)).toEqual([
+      "custom_access_token_hook",
+      "switch_company",
+      "create_founding_membership",
+    ]);
+  });
+
+  it("exempts nothing that does not exist", () => {
+    // An exemption for a function that was renamed or dropped is a hole with a
+    // justification attached: the sweep would go on honouring the name while
+    // whatever replaced it goes unexamined.
+    const present = new Set(functions.map((fn) => fn.name));
+    for (const entry of SECURITY_DEFINER_EXEMPTIONS) {
+      expect(
+        present.has(entry.name),
+        `SECURITY_DEFINER_EXEMPTIONS names public.${entry.name}(), which is not in the catalog`,
+      ).toBe(true);
+    }
   });
 
   it.each(SECURITY_DEFINER_EXEMPTIONS.map((entry) => [entry.name, entry] as const))(
@@ -317,6 +377,199 @@ describe("functions in public", () => {
       expect(entry.justification.trim().length).toBeGreaterThan(80);
     },
   );
+});
+
+describe("the privilege surface is declared, not inherited", () => {
+  /**
+   * The registry's own hygiene, and the reason it is a separate block.
+   *
+   * The per-relation assertions above prove that what is HELD matches what is
+   * DECLARED. They say nothing about whether the declaration is honest: a
+   * registry that declared `anon: { table: ["SELECT", "UPDATE", "DELETE"] }`
+   * would pass every one of them while describing a hole.
+   */
+
+  it("declares nothing for a relation that does not exist", () => {
+    // A declaration for a dropped or renamed table is a rule with nothing
+    // under it, and worse, it is a rule a reader will believe is protecting
+    // something.
+    const present = new Set(swept.map((relation) => relation.qualified));
+    for (const qualified of Object.keys(REQUEST_ROLE_PRIVILEGES)) {
+      expect(
+        present.has(qualified),
+        `REQUEST_ROLE_PRIVILEGES declares ${qualified}, which is not in the catalog`,
+      ).toBe(true);
+    }
+  });
+
+  it("gives anon nothing, anywhere", () => {
+    // `anon` holds no tenant claim by definition, so no privilege it could
+    // hold is defensible. Stated once here as a property of the registry
+    // rather than trusted to three separate declarations staying right.
+    for (const [qualified, declared] of Object.entries(REQUEST_ROLE_PRIVILEGES)) {
+      expect(
+        normalisePrivileges(declared.anon),
+        `${qualified} declares a privilege for anon`,
+      ).toEqual({ table: [], columns: {} });
+    }
+  });
+
+  it("declares no privilege Postgres does not have", () => {
+    // A typo -- "SELCT", "MODIFY" -- would make a declaration unmatchable and
+    // the per-relation assertion would read as a missing grant, which sends
+    // the next reader to the migration instead of to the registry.
+    for (const [qualified, declared] of Object.entries(REQUEST_ROLE_PRIVILEGES)) {
+      for (const role of REQUEST_ROLES) {
+        for (const privilege of declared[role].table) {
+          expect(TABLE_PRIVILEGES, `${qualified}.${role} declares "${privilege}"`).toContain(
+            privilege,
+          );
+        }
+        for (const [column, privileges] of Object.entries(declared[role].columns)) {
+          for (const privilege of privileges) {
+            expect(
+              COLUMN_PRIVILEGES,
+              `${qualified}.${role}.${column} declares "${privilege}", which Postgres cannot grant ` +
+                `on a single column`,
+            ).toContain(privilege);
+          }
+        }
+      }
+    }
+  });
+
+  it("never declares a column privilege the table grant already implies", () => {
+    // The reader reports a column privilege only where the table-level one is
+    // absent, so declaring both makes a relation permanently unmatchable.
+    for (const [qualified, declared] of Object.entries(REQUEST_ROLE_PRIVILEGES)) {
+      for (const role of REQUEST_ROLES) {
+        for (const [column, privileges] of Object.entries(declared[role].columns)) {
+          for (const privilege of privileges) {
+            expect(
+              declared[role].table,
+              `${qualified}.${role} declares ${privilege} on both the table and column ${column}`,
+            ).not.toContain(privilege);
+          }
+        }
+      }
+    }
+  });
+
+  it("leaves no default privilege that would expose the NEXT table", async () => {
+    // The other half of 20260828000000. Resetting the three tables that exist
+    // fixes today; revoking the default ACL is what stops Story 1.7's
+    // `branches` being born writable by `anon` before anyone has written a
+    // line about it.
+    //
+    // Only the migration role's defaults are checked, and only those can be:
+    // a default ACL is keyed on the role that CREATES the object, and
+    // `postgres` is not a member of `supabase_admin` on a Supabase project, so
+    // that role's defaults cannot be altered from a migration. They do not
+    // need to be -- nothing in this repository creates an object as
+    // `supabase_admin`.
+    const leftover = await withAdmin(async (client) => {
+      const { rows } = await client.query<{ grantor: string; objtype: string; acl: string }>(
+        `select pg_get_userbyid(d.defaclrole) as grantor,
+                d.defaclobjtype::text        as objtype,
+                d.defaclacl::text            as acl
+           from pg_default_acl d
+           join pg_namespace n on n.oid = d.defaclnamespace
+          where n.nspname = 'public'
+            and d.defaclrole = (select oid from pg_roles where rolname = current_user)
+            and (d.defaclacl::text like '%anon=%' or d.defaclacl::text like '%authenticated=%')`,
+      );
+      return rows;
+    });
+    expect(
+      leftover,
+      "a default privilege in public still grants a request role, so the next table created " +
+        "by a migration will be born with it",
+    ).toEqual([]);
+  });
+
+  it.each(Object.entries(REQUEST_ROLE_PRIVILEGES))("%s states why", (_qualified, declared) => {
+    // Same discipline as an exemption. A grant nobody has to justify is how a
+    // write surface grows one column at a time.
+    expect(declared.why.trim().length).toBeGreaterThan(80);
+  });
+
+  it("sees a table born under Supabase's default privileges as fully granted", async () => {
+    // THE NEGATIVE CONTROL, and the one that makes this whole block worth
+    // having. Everything above asserts that three tables match their
+    // declarations, which would be equally true of a reader that returned the
+    // declaration back to itself.
+    //
+    // `globalSetup` installs Supabase's `ALTER DEFAULT PRIVILEGES ... GRANT
+    // ALL ON TABLES TO anon, authenticated` before migrating, so a table
+    // created with no grants of its own is born with all of them -- exactly as
+    // `public.memberships` was on the live project. This proves the reader
+    // sees that, and therefore that a future migration which forgets its
+    // `revoke` fails here rather than in production.
+    const born = await withAdmin(async (client) => {
+      await client.query("begin");
+      try {
+        // Installed HERE rather than relied on from `globalSetup`, and that is
+        // the point of the fix that produced this line. The migration in
+        // 20260828000000 revokes the default privileges for the migration
+        // role, so by the time the suite runs they are gone -- which is
+        // correct for production and would have made this control silently
+        // pass against a substrate that no longer has the hazard. It installs
+        // its own, from the same shared definition `globalSetup` uses, and
+        // rolls it back.
+        await installSupabaseDefaultPrivileges(client);
+        await client.query(
+          `create table public.privilege_control (id uuid primary key, tenant_id uuid not null)`,
+        );
+        // The pattern the earlier migrations used, which is NOT enough: the
+        // default ACL grants anon EXPLICITLY, and revoking from PUBLIC does
+        // not remove an explicit role grant.
+        await client.query(`revoke all on public.privilege_control from public`);
+        await client.query(`grant select on public.privilege_control to authenticated`);
+        const held = await readRequestRolePrivileges(client);
+        return held["public.privilege_control"];
+      } finally {
+        await client.query("rollback");
+      }
+    });
+
+    expect(born, "the privilege reader did not see a newly created table").toBeDefined();
+    // Both roles, everything. If this ever reports `{table: []}` the container
+    // has stopped simulating the real project and the assertions above have
+    // quietly stopped meaning anything.
+    expect(
+      normalisePrivileges(born.anon).table,
+      "the container is no longer reproducing Supabase's default ACLs; every privilege " +
+        "assertion in this file is now weaker than production",
+    ).toEqual([...TABLE_PRIVILEGES].sort());
+    expect(normalisePrivileges(born.authenticated).table).toEqual([...TABLE_PRIVILEGES].sort());
+  });
+
+  it("sees an explicit revoke bring the same table back to its intent", async () => {
+    // The positive half: the fix works, and the fix is the pattern every
+    // migration from here has to use -- revoke from the ROLES, then grant.
+    const fixed = await withAdmin(async (client) => {
+      await client.query("begin");
+      try {
+        await installSupabaseDefaultPrivileges(client);
+        await client.query(
+          `create table public.privilege_control (id uuid primary key, tenant_id uuid not null)`,
+        );
+        await client.query(`revoke all on public.privilege_control from anon, authenticated`);
+        await client.query(`grant select on public.privilege_control to authenticated`);
+        await client.query(`grant insert (tenant_id) on public.privilege_control to authenticated`);
+        const held = await readRequestRolePrivileges(client);
+        return held["public.privilege_control"];
+      } finally {
+        await client.query("rollback");
+      }
+    });
+
+    expect(normalisePrivileges(fixed.anon)).toEqual({ table: [], columns: {} });
+    expect(normalisePrivileges(fixed.authenticated)).toEqual({
+      table: ["SELECT"],
+      columns: { tenant_id: ["INSERT"] },
+    });
+  });
 });
 
 describe("the exemption allowlist", () => {
