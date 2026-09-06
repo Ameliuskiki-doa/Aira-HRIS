@@ -295,6 +295,44 @@ describe("a user whose memberships are all deactivated", () => {
     expect(metadata).toHaveProperty("provider", "email");
   });
 
+  it("strips EVERY claim it writes, derived from what it writes", async () => {
+    // The three `not.toHaveProperty` assertions above name the three claims
+    // that exist today, which is the same shape as the bug they guard: a
+    // second list, correct on the day it was written. This one derives the
+    // key set from the hook's OWN OUTPUT, so a fourth claim is covered by
+    // this test the moment it is added rather than the moment someone
+    // remembers to add a line here. Story 1.7 introduces branches.
+    //
+    // Step 1: ask the hook what it writes, for a user who has a membership.
+    const written = await withRows(
+      INSERT_MEMBERSHIP,
+      [TENANT_A, USER.single, "admin", null, true, new Date().toISOString(), new Date().toISOString()],
+      (client) => callHook(client, eventFor(USER.single)),
+    );
+    const ownedKeys = Object.keys(appMetadataOf(written));
+    // Non-vacuity: an empty key set would make every assertion below pass
+    // while proving nothing at all.
+    expect(ownedKeys.length, "the hook injected nothing to derive a key set from").toBeGreaterThan(0);
+    expect(ownedKeys).toContain("tenant_id");
+
+    // Step 2: forge every one of those keys on the inbound event for a user
+    // whose membership is deactivated, alongside a key that is not ours.
+    const forged = Object.fromEntries(ownedKeys.map((key) => [key, "forged"]));
+    const result = await withRows(
+      INSERT_MEMBERSHIP,
+      [TENANT_A, USER.deactivated, "admin", null, false, new Date().toISOString(), new Date().toISOString()],
+      (client) =>
+        callHook(client, eventFor(USER.deactivated, { ...forged, provider: "email" })),
+    );
+
+    // Step 3: none of ours survives, and GoTrue's own does.
+    const metadata = appMetadataOf(result);
+    for (const key of ownedKeys) {
+      expect(metadata, `${key} survived a deactivation`).not.toHaveProperty(key);
+    }
+    expect(metadata).toHaveProperty("provider", "email");
+  });
+
   it("strips an inbound tenant_id for a user with no membership row either", async () => {
     // The same property one step further out: a token issued before a
     // membership was deleted must not survive the deletion.

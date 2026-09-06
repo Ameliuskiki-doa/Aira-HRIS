@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-21-2026 11:54
-last_updated: '09-06-2026 03:20'
+last_updated: '09-06-2026 18:40'
 project: Aira
 project_key: NOKEY
 tracking_system: file-system
@@ -100,14 +100,14 @@ action_items:
     action: "Assert the anon-EXECUTE property over all functions and revoke EXECUTE
       from PUBLIC, before Story 1.7 adds any"
     owner: "next story implementer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
   - id: "epic-1-retro-item-4-make-the-access-token-hook-strip-every-c"
     epic: 1
     action: "Make the access token hook strip every claim it owns rather than three
       named keys, before Story 1.7"
     owner: "next story implementer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-06.md"
   - id: "epic-1-retro-item-5-route-sign-in-landing-through-the-member"
     epic: 1

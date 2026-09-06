@@ -32,6 +32,7 @@ import {
   EXEMPTIONS,
   normalisePrivileges,
   readFunctions,
+  ANON_EXECUTE_EXEMPTIONS,
   readPolicies,
   readRelations,
   readRequestRolePrivileges,
@@ -371,12 +372,73 @@ describe("functions in public", () => {
     }
   });
 
-  it.each(SECURITY_DEFINER_EXEMPTIONS.map((entry) => [entry.name, entry] as const))(
-    "%s states why it is security definer",
+  it.each(functions.filter((fn) => fn.readsClaims).map((fn) => [fn.name, fn] as const))(
+    "%s is stable",
+    (_name, fn) => {
+      // Rule 3 requires every policy to wrap the claim as
+      // `(select public.tenant_id())`, and `%s wraps the claim in a subquery`
+      // above enforces exactly that. The subquery only caches ONCE because the
+      // function is `stable`; downgrade it to `volatile` and Postgres is back
+      // to re-evaluating per row -- the measured 7.4x, with every policy still
+      // reading `(select ...)` and this file previously still green. The
+      // wrapping was enforced and the property that makes wrapping work was
+      // not. Found by the Epic 1 retrospective.
+      expect(
+        fn.volatility,
+        `${fn.qualified}() is provolatile = '${fn.volatility}'; a claim function must be 's'`,
+      ).toBe("s");
+    },
+  );
+
+  it("grants anon EXECUTE on nothing of ours without an exemption", () => {
+    // Postgres grants EXECUTE TO PUBLIC on every new routine and anon is a
+    // member of PUBLIC, so a routine ships anon-callable -- through PostgREST
+    // at /rest/v1/rpc/<name> -- unless its migration says otherwise. Measured
+    // on PG17: `alter default privileges ... revoke execute on functions from
+    // public` does NOT move that default; it writes no pg_default_acl row at
+    // all. There is no DDL that makes the safe thing automatic here, which is
+    // why this assertion is the wall rather than a second belt.
+    //
+    // Extension-owned routines are excluded by a pg_depend property rather
+    // than by name -- see ANON_EXECUTE_EXEMPTIONS for why, and for the ltree
+    // move that Story 1.7 owns.
+    const exempted = new Set(ANON_EXECUTE_EXEMPTIONS.map((entry) => entry.name));
+    const offenders = functions
+      .filter((fn) => !fn.extensionMember && fn.executableByAnon && !exempted.has(fn.name))
+      .map((fn) => `${fn.qualified}()`);
+    expect(
+      offenders,
+      "anon can execute these; add `revoke execute on function ... from public` to the " +
+        "migration that creates each one, or an entry in ANON_EXECUTE_EXEMPTIONS with a justification",
+    ).toEqual([]);
+  });
+
+  it("holds exactly the two agreed anon-execute exemptions", () => {
+    // Same shape as the security-definer pin above and for the same reason: a
+    // third routine anon may call is a decision, and this line is what makes
+    // taking it quietly impossible.
+    expect(ANON_EXECUTE_EXEMPTIONS.map((entry) => entry.name)).toEqual([
+      "tenant_id",
+      "auth_user_id",
+    ]);
+  });
+
+  it.each(ANON_EXECUTE_EXEMPTIONS.map((entry) => [entry.name, entry] as const))(
+    "%s states why anon may execute it",
     (_name, entry) => {
       expect(entry.justification.trim().length).toBeGreaterThan(80);
     },
   );
+
+  it("exempts no anon-execute entry that does not exist", () => {
+    const present = new Set(functions.map((fn) => fn.name));
+    for (const entry of ANON_EXECUTE_EXEMPTIONS) {
+      expect(
+        present.has(entry.name),
+        `ANON_EXECUTE_EXEMPTIONS names ${entry.name}(), which is not in the catalog`,
+      ).toBe(true);
+    }
+  });
 });
 
 describe("the privilege surface is declared, not inherited", () => {
@@ -682,6 +744,95 @@ describe("negative controls", () => {
     expect(found?.securityDefiner).toBe(true);
     // Also the default nobody sets deliberately.
     expect(found?.parallel).toBe("u");
+  });
+
+  it("flags a routine anon can execute, which is what a routine is born as", async () => {
+    // The control that matters most, because it proves the DEFAULT and not
+    // just the reader: nothing here grants anything. A bare `create function`
+    // is anon-executable the moment it exists.
+    const found = await inRolledBackTransaction(
+      [`create function public.negative_control_open_fn() returns int
+          language sql immutable as 'select 1'`],
+      async (client) =>
+        (await readFunctions(client)).find((fn) => fn.name === "negative_control_open_fn"),
+    );
+    expect(found, "discovery did not see a newly created function").toBeDefined();
+    expect(found?.executableByAnon, "a bare create function was not anon-executable").toBe(true);
+    expect(found?.extensionMember, "ours must never be an extension member").toBe(false);
+  });
+
+  it("sees the explicit revoke as the only thing that closes it", async () => {
+    // The other half. `alter default privileges ... from public` is measured
+    // as a no-op above; this is what does work, and it is why the rule is
+    // "every migration writes a revoke" rather than "set a better default".
+    const found = await inRolledBackTransaction(
+      [
+        `create function public.negative_control_shut_fn() returns int
+           language sql immutable as 'select 1'`,
+        `revoke execute on function public.negative_control_shut_fn() from public`,
+      ],
+      async (client) =>
+        (await readFunctions(client)).find((fn) => fn.name === "negative_control_shut_fn"),
+    );
+    expect(found?.executableByAnon).toBe(false);
+  });
+
+  it("discovers a PROCEDURE, which prokind = 'f' could not see", async () => {
+    // A security definer PROCEDURE was invisible to every rule in this file
+    // while the reader filtered on prokind = 'f'. It is invoked with CALL and
+    // reaches the same rows. Found by the Epic 1 retrospective.
+    const found = await inRolledBackTransaction(
+      [
+        `create procedure public.negative_control_proc()
+           language sql security definer as 'select 1'`,
+      ],
+      async (client) =>
+        (await readFunctions(client)).find((fn) => fn.name === "negative_control_proc"),
+    );
+    expect(found, "the sweep did not see a procedure").toBeDefined();
+    expect(found?.kind).toBe("p");
+    expect(found?.securityDefiner).toBe(true);
+  });
+
+  it("discovers a routine outside public, which one schema could not see", async () => {
+    const found = await inRolledBackTransaction(
+      [
+        `create schema negative_control_schema`,
+        `create function negative_control_schema.hidden_fn() returns int
+           language sql security definer immutable as 'select 1'`,
+      ],
+      async (client) => (await readFunctions(client)).find((fn) => fn.name === "hidden_fn"),
+    );
+    expect(found, "the sweep did not look outside public").toBeDefined();
+    expect(found?.schema).toBe("negative_control_schema");
+    expect(found?.qualified).toBe("negative_control_schema.hidden_fn");
+    expect(found?.securityDefiner).toBe(true);
+  });
+
+  it("reads volatility, and sees the default a claim function must not keep", async () => {
+    const found = await inRolledBackTransaction(
+      [`create function public.negative_control_vol() returns int
+          language sql as 'select 1'`],
+      async (client) =>
+        (await readFunctions(client)).find((fn) => fn.name === "negative_control_vol"),
+    );
+    // `volatile` is what you get by saying nothing -- the same shape as the
+    // `parallel = 'u'` default asserted above.
+    expect(found?.volatility).toBe("v");
+  });
+
+  it("sees an extension's routines as extension members, and ours as not", async () => {
+    const [extensionOwned, ours] = await withAdmin(async (client) => {
+      const functions = await readFunctions(client);
+      return [
+        functions.find((fn) => fn.name === "nlevel"),
+        functions.find((fn) => fn.name === "tenant_id"),
+      ];
+    });
+    // The exclusion in the anon-execute rule is a pg_depend property. If this
+    // ever inverts, that rule silently stops covering our own routines.
+    expect(extensionOwned?.extensionMember, "ltree's nlevel is not marked as an extension member").toBe(true);
+    expect(ours?.extensionMember, "public.tenant_id was marked as an extension member").toBe(false);
   });
 
   it("flags a policy granted to anon with an unconditioned qual", async () => {

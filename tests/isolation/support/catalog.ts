@@ -161,6 +161,52 @@ export const SECURITY_DEFINER_EXEMPTIONS: readonly FunctionExemption[] = [
   },
 ];
 
+/**
+ * Routines `anon` may execute, and why each one is safe.
+ *
+ * The default the other way round is what makes this list short: Postgres
+ * grants `EXECUTE TO PUBLIC` on every new function, `anon` is a member of
+ * PUBLIC, and -- measured, three spellings, Postgres 17 --
+ * `alter default privileges ... revoke execute on functions from public` is a
+ * NO-OP. It writes no `pg_default_acl` row and the next function is still born
+ * with `proacl = null`, which means the built-in default. So there is no DDL
+ * that makes "not anon-callable" the default for routines the way
+ * `alter default privileges ... revoke all on tables` does for tables.
+ *
+ * Since the default cannot be moved, the gate has to be the wall: every routine
+ * we create must carry an explicit `revoke execute ... from public`, and the
+ * test below fails on any that does not. Adding a routine and forgetting the
+ * revoke is now a red suite rather than an endpoint at `/rest/v1/rpc/<name>`.
+ *
+ * Extension-owned routines are held to a different standard and excluded by
+ * `extensionMember` -- a `pg_depend` property, not a name list. `ltree` alone
+ * puts ~80 anon-executable functions in `public`; they are pure, take `ltree`
+ * and `text`, and reach no table. Moving the extension to the `extensions`
+ * schema is the real fix and is deferred to Story 1.7, which is the first story
+ * with a real ltree query to prove `authenticated`'s search_path still resolves
+ * the operators.
+ */
+export const ANON_EXECUTE_EXEMPTIONS: readonly FunctionExemption[] = [
+  {
+    name: "tenant_id",
+    justification:
+      "Policy expressions are evaluated as the CALLING role, so an anonymous request that touches a " +
+      "table with a tenant policy must be able to execute the claim function or the policy cannot be " +
+      "adjudicated at all. It reads request.jwt.claims and returns only the caller's own tenant -- a " +
+      "value the caller already holds in the token it presented -- so there is nothing here an anon " +
+      "caller does not already have. For anon specifically it returns null, which is what makes every " +
+      "tenant policy fail closed rather than erroring.",
+  },
+  {
+    name: "auth_user_id",
+    justification:
+      "The same argument as tenant_id, for the same reason: organizations_owner and the ownership " +
+      "checks inside register_company are policy expressions evaluated as the caller, so the caller " +
+      "must hold EXECUTE. It returns the sub of the presented JWT and nothing else, so an anon caller " +
+      "learns nothing -- it gets null, the value that makes every ownership check refuse.",
+  },
+];
+
 /* ── the privilege surface ─────────────────────────────────────────────────── */
 
 /**
@@ -647,10 +693,25 @@ export async function readPolicies(client: Client): Promise<CatalogPolicy[]> {
 export type CatalogFunction = {
   schema: string;
   name: string;
+  /** `public.tenant_id`. Two schemas may hold the same name. */
+  qualified: string;
+  /** `f` function, `p` procedure. A procedure is invoked with `CALL`. */
+  kind: string;
   /** `s` safe, `r` restricted, `u` unsafe. */
   parallel: string;
+  /** `i` immutable, `s` stable, `v` volatile. */
+  volatility: string;
   securityDefiner: boolean;
   readsClaims: boolean;
+  /**
+   * Installed by `create extension`, not by one of our migrations.
+   *
+   * A property, not a name list: `pg_depend` records the dependency when the
+   * extension is created, and nothing we write can acquire it. That is what
+   * makes it safe to hold extension-owned routines to a different standard --
+   * they are not ours to declare, revoke or pin.
+   */
+  extensionMember: boolean;
   /** Roles that can EXECUTE it. */
   executableByAnon: boolean;
   executableByAuthenticated: boolean;
@@ -667,37 +728,66 @@ export type CatalogFunction = {
  *
  * The claim functions are discovered by what they read, not by name, so a
  * later `public.membership_role()` gets both checks for free.
+ *
+ * The sweep is a property on three axes, each of which was a list until the
+ * Epic 1 retrospective:
+ *
+ *   * every application schema, not `public` alone -- mirroring `readRelations`,
+ *     so a second schema cannot become a place to hide a definer routine;
+ *   * `prokind in ('f','p')` -- a PROCEDURE is invoked with `CALL` and was
+ *     discovered by nothing while the filter read `prokind = 'f'`;
+ *   * `provolatile` is read, because CLAUDE.md rule 3's `(select ...)` wrapping
+ *     only caches while the claim function is `stable`. The wrapping was
+ *     enforced; the property that makes wrapping work was not.
  */
 export async function readFunctions(client: Client): Promise<CatalogFunction[]> {
   const { rows } = await client.query<{
     schema: string;
     name: string;
+    kind: string;
     parallel: string;
+    volatility: string;
     security_definer: boolean;
     reads_claims: boolean;
+    extension_member: boolean;
     exec_anon: boolean;
     exec_authenticated: boolean;
   }>(
     `select n.nspname as schema,
             p.proname as name,
+            p.prokind::text as kind,
             p.proparallel::text as parallel,
+            p.provolatile::text as volatility,
             p.prosecdef as security_definer,
             coalesce(p.prosrc like '%request.jwt.claims%', false) as reads_claims,
+            exists (
+              select 1 from pg_depend d
+               where d.objid = p.oid
+                 and d.classid = 'pg_proc'::regclass
+                 and d.deptype = 'e'
+            ) as extension_member,
             coalesce(has_function_privilege('anon', p.oid, 'EXECUTE'), false) as exec_anon,
             coalesce(has_function_privilege('authenticated', p.oid, 'EXECUTE'), false)
               as exec_authenticated
      from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
-       and p.prokind = 'f'
-     order by p.proname`,
+     where p.prokind in ('f', 'p')
+       and n.nspname not in ('pg_catalog', 'information_schema')
+       and n.nspname not like 'pg\\_%'
+       and n.nspname <> all ($1::text[])
+     order by n.nspname, p.proname`,
+    [[...RUNNER_SCHEMAS]],
   );
   return rows.map((row) => ({
     schema: row.schema,
     name: row.name,
+    qualified: qualify(row.schema, row.name),
+    kind: row.kind,
     parallel: row.parallel,
+    volatility: row.volatility,
     securityDefiner: row.security_definer,
     readsClaims: row.reads_claims,
+    extensionMember: row.extension_member,
     executableByAnon: row.exec_anon,
     executableByAuthenticated: row.exec_authenticated,
   }));
